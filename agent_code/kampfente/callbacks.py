@@ -67,6 +67,7 @@ def state_to_features(game_state: dict) -> np.array:
     :return: np.array
     """
     # This is the dict before the game begins and after it ends
+    ####how?
     if game_state is None:
         return None
 
