@@ -44,8 +44,8 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
-    #self.logger.info(state_to_features(game_state))
-    self.logger.info(game_state['field'])
+    self.logger.info(state_to_features(game_state))
+    #self.logger.info(game_state['bombs'])
     random_prob = .1
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
@@ -77,7 +77,7 @@ def state_to_features(game_state: dict) -> np.array:
     # For example, you could construct several channels of equal shape, ...
     channels = []
     coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
-    channels.append(np.array([game_state['round'], game_state['step'], None, None]))    # current game state holding the current round, step and score
+    '''channels.append(np.array([game_state['round'], game_state['step'], None, None]))    # current game state holding the current round, step and score
     channels.append(np.array([game_state['self'][3][0], game_state['self'][3][1], int(game_state['self'][2] == True), game_state['self'][1]]))     # info about self: xpos, ypos, bomb available (0=False, 1=True), score
     for i in range(len(game_state['others'])):
         channels.append(np.array([game_state['others'][i][3][0], game_state['others'][i][3][1], int(game_state['others'][i][2] == True), game_state['others'][1]]))     # info about others: xpos, ypos, bomb available (0=False, 1=True), score
@@ -85,8 +85,28 @@ def state_to_features(game_state: dict) -> np.array:
         channels.append(np.concatenate((xy, [game_state['field'][xy[0]][xy[1]], None])))   # all coordinates and the tile at that coordinate (1,-1,0)
         channels.append(np.concatenate((xy, [game_state['explosion_map'][xy[0]][xy[1]], None])))    # all coordinates and the current explosion state of that coordinate
     for i in range(len(game_state['bombs'])):
-        channels.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1], game_state['bombs'][i][1], None])    # info about the bombs: xpos, ypos, timer
-    # coins
+        channels.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1], game_state['bombs'][i][1], None])    # info about the bombs: xpos, ypos, timer'''
+    channels.append([game_state['self'][1], int(game_state['self'][2] == True), game_state['self'][3][0], game_state['self'][3][1], game_state['round'], game_state['step']])
+    for xy in coordinates:
+        field_state = game_state['field'][xy[0]][xy[1]]
+        explosion_state = game_state['explosion_map'][xy[0]][xy[1]]
+        bomb_countdown = -1
+        for bomb in game_state['bombs']:
+            if (xy[0],xy[1]) in bomb:
+                bomb_countdown = bomb[1]
+        coin_state = 0
+        for coin in game_state['coins']:
+            if (xy[0],xy[1]) == coin:
+                coin = 1
+        other_state = 0
+        other_bomb = 0
+        for other in game_state['others']:
+            if (xy[0],xy[1]) == other[3]:
+                other_state = 1
+                other_score = other[1]
+                other_bomb = int(other[2] == True)
+        channels.append([field_state, explosion_state, bomb_countdown, coin_state, other_state, other_bomb])
+    
     # concatenate them as a feature tensor (they must have the same shape), ...
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
