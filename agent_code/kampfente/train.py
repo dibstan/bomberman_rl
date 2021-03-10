@@ -65,7 +65,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         'LEFT': [1 for i in range(len(new_game_state))], 'WAIT': [1 for i in range(len(new_game_state))], 'BOMB': [1 for i in range(len(new_game_state))]}
     
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
-    if old_game_state["step"] is not None:
+    if old_game_state is not None:
         alpha = 1
 
         old_state_vector = state_to_features(old_game_state)
