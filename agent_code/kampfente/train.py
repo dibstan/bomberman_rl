@@ -80,7 +80,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
     
         try:
-            reward = reward_from_events(events)
+            reward = reward_from_events(self,events)
+            
         except:
             reward = 0
 
@@ -105,8 +106,16 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
-    self.model = self.temp_model
+    
+    last_state_vector = state_to_features(last_game_state)
+    reward = reward_from_events(self,events)
+    alpha = .1
+
+    gradient_vector = np.dot(np.transpose(last_state_vector) , reward - np.dot(last_state_vector, self.temp_model[last_action]))
+    self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
+
     # Store the model
+    self.model = self.temp_model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
