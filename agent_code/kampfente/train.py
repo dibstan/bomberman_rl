@@ -17,7 +17,6 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 # Events
 PLACEHOLDER_EVENT = "PLACEHOLDER"
 
-
 def setup_training(self):
     """
     Initialise self for training purpose.
@@ -29,8 +28,8 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.batch = deque(maxlen = TRANSITION_HISTORY_SIZE)
-    self.betas_current = self.model
+    #self.history = {'UP' = [], 'RIGHT' = [], 'DOWN' = [], 'LEFT' = [], 'WAIT' = [], 'BOMB' = []}
+
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -51,7 +50,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
-
+    self.logger.info(self_action)
     # Idea: Add your own events to hand out rewards
     if ...:
         events.append(PLACEHOLDER_EVENT)
@@ -64,19 +63,21 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     alpha = 1
 
-    state_vector = state_to_features(new_game_state)
-    self.batch.append(state_vector)
-    self.betas_current = [np.ones(len(state_vector)) for i in range(6)]
+    old_state_vector = state_to_features(old_game_state)
+    new_state_vector = state_to_features(new_game_state)
+    
     
     #setting up model if necessary
     if self.model == None:
-        self.model = [np.ones(len(state_vector)) for i in range(6)]
+        self.model = {'UP': [1 for i in range(len(old_game_state))], 
+        'RIGHT': [1 for i in range(len(old_game_state))], 'DOWN': [1 for i in range(len(old_game_state))],
+         'LEFT': [1 for i in range(len(old_game_state))], 'WAIT': [1 for i in range(len(old_game_state))], 'BOMB': [1 for i in range(len(old_game_state))]}
 
     
-    if new_game_state["round"] > TRANSITION_HISTORY_SIZE:
-        for i in range(len(betas)):
-            gradient_vector = np.sum(np.dot(np.transpose(self.batch, axis = 1) , np.dot(self.batch, self.model[i]) - np.dot(self.batch, self.betas_current[i])))
-            self.betas_current[i] = self.betas_current[i] + alpha/ TRANSITION_HISTORY_SIZE * gradient_vector 
+    reward = reward_from_events(events)
+    
+    gradient_vector = np.sum(np.dot(np.transpose(old_state_vector) , reward + q_func(new_state_vector) - np.dot(old_state_vector, self.model[self_action])))
+    self.model[self_action] = self.model[self_action] + alpha/ 2 * gradient_vector 
 
     
 
@@ -111,6 +112,8 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 1,
         e.KILLED_OPPONENT: 5,
+        e.MOVED_DOWN: 0.5,
+        e.MOVED_UP: 0.5,
         PLACEHOLDER_EVENT: -.1  # idea: the custom event is bad
     }
     reward_sum = 0
@@ -119,3 +122,16 @@ def reward_from_events(self, events: List[str]) -> int:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
+
+
+
+def q_func(self, X):
+    q_array = []
+    q_array.append(np.dot(X, self.model["UP"]))
+    q_array.append(np.dot(X, self.model["RIGHT"]))
+    q_array.append(np.dot(X, self.model["DOWN"]))
+    q_array.append(np.dot(X, self.model["LEFT"]))
+    q_array.append(np.dot(X, self.model["WAIT"]))
+    q_array.append(np.dot(X, self.model["BOMB"]))
+    return max(q_array)
+
