@@ -58,26 +58,25 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
-    
-    
-    #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
-    alpha = 1
-
-    old_state_vector = state_to_features(old_game_state)
-    new_state_vector = state_to_features(new_game_state)
-    
-    
     #setting up model if necessary
     if self.model == None:
         self.model = {'UP': [1 for i in range(len(new_game_state))], 
         'RIGHT': [1 for i in range(len(new_game_state))], 'DOWN': [1 for i in range(len(new_game_state))],
-         'LEFT': [1 for i in range(len(new_game_state))], 'WAIT': [1 for i in range(len(new_game_state))], 'BOMB': [1 for i in range(len(new_game_state))]}
+        'LEFT': [1 for i in range(len(new_game_state))], 'WAIT': [1 for i in range(len(new_game_state))], 'BOMB': [1 for i in range(len(new_game_state))]}
+    
+    #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
+    if old_game_state["step"] is not None:
+        alpha = 1
 
+        old_state_vector = state_to_features(old_game_state)
+        new_state_vector = state_to_features(new_game_state)
+        
+        
+        reward = reward_from_events(events)
+        
+        gradient_vector = np.sum(np.dot(np.transpose(old_state_vector) , reward + q_func(new_state_vector) - np.dot(old_state_vector, self.model[self_action])))
+        self.model[self_action] = self.model[self_action] + alpha/ 2 * gradient_vector 
     
-    reward = reward_from_events(events)
-    
-    gradient_vector = np.sum(np.dot(np.transpose(old_state_vector) , reward + q_func(new_state_vector) - np.dot(old_state_vector, self.model[self_action])))
-    self.model[self_action] = self.model[self_action] + alpha/ 2 * gradient_vector 
 
     
 
