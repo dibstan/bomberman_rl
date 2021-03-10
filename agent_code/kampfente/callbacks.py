@@ -26,8 +26,8 @@ def setup(self):
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
-        weights = np.random.rand(len(ACTIONS))
-        self.model = weights / weights.sum()
+        ##weights = np.random.rand(len(ACTIONS))
+        self.model = None ## weights / weights.sum()
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -110,4 +110,5 @@ def state_to_features(game_state: dict) -> np.array:
     # concatenate them as a feature tensor (they must have the same shape), ...
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
+    
     return stacked_channels #stacked_channels.reshape(-1)

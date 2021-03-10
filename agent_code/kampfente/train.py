@@ -29,6 +29,8 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
+    self.batch = deque(maxlen = TRANSITION_HISTORY_SIZE)
+    self.betas_current = self.model
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -53,9 +55,30 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     # Idea: Add your own events to hand out rewards
     if ...:
         events.append(PLACEHOLDER_EVENT)
-
+     
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
+    
+    
+    
+    #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
+    alpha = 1
+
+    state_vector = state_to_features(new_game_state)
+    self.batch.append(state_vector)
+    self.betas_current = [np.ones(len(state_vector)) for i in range(6)]
+    
+    #setting up model if necessary
+    if self.model == None:
+        self.model = [np.ones(len(state_vector)) for i in range(6)]
+
+    
+    if new_game_state["round"] > TRANSITION_HISTORY_SIZE:
+        for i in range(len(betas)):
+            gradient_vector = np.sum(np.dot(np.transpose(self.batch, axis = 1) , np.dot(self.batch, self.model[i]) - np.dot(self.batch, self.betas_current[i])))
+            self.betas_current[i] = self.betas_current[i] + alpha/ TRANSITION_HISTORY_SIZE * gradient_vector 
+
+    
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
