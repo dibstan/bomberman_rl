@@ -1,8 +1,10 @@
 import os
 import pickle
 import random
-
+import sklearn as sk
+from sklearn.feature_extraction import DictVectorizer
 import numpy as np
+from itertools import product
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -42,7 +44,8 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
-    print(game_state)
+    #self.logger.info(state_to_features(game_state))
+    self.logger.info(game_state['field'])
     random_prob = .1
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
@@ -71,11 +74,20 @@ def state_to_features(game_state: dict) -> np.array:
 
     if game_state is None:
         return None
-
     # For example, you could construct several channels of equal shape, ...
     channels = []
-    channels.append(...)
+    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
+    channels.append(np.array([game_state['round'], game_state['step'], None, None]))    # current game state holding the current round, step and score
+    channels.append(np.array([game_state['self'][3][0], game_state['self'][3][1], int(game_state['self'][2] == True), game_state['self'][1]]))     # info about self: xpos, ypos, bomb available (0=False, 1=True), score
+    for i in range(len(game_state['others'])):
+        channels.append(np.array([game_state['others'][i][3][0], game_state['others'][i][3][1], int(game_state['others'][i][2] == True), game_state['others'][1]]))     # info about others: xpos, ypos, bomb available (0=False, 1=True), score
+    for xy in coordinates:          
+        channels.append(np.concatenate((xy, [game_state['field'][xy[0]][xy[1]], None])))   # all coordinates and the tile at that coordinate (1,-1,0)
+        channels.append(np.concatenate((xy, [game_state['explosion_map'][xy[0]][xy[1]], None])))    # all coordinates and the current explosion state of that coordinate
+    for i in range(len(game_state['bombs'])):
+        channels.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1], game_state['bombs'][i][1], None])    # info about the bombs: xpos, ypos, timer
+    # coins
     # concatenate them as a feature tensor (they must have the same shape), ...
-    stacked_channels = np.stack(channels)
+    stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
-    return stacked_channels.reshape(-1)
+    return stacked_channels #stacked_channels.reshape(-1)
