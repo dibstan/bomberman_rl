@@ -79,7 +79,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         except:
             reward = 0
 
-        gradient_vector = np.sum(np.dot(np.transpose(old_state_vector) , reward + q_func(self,new_state_vector) - np.dot(old_state_vector, self.model[self_action])))
+        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + q_func(self,new_state_vector) - np.dot(old_state_vector, self.model[self_action]))
         self.model[self_action] = self.model[self_action] + alpha/ 2 * gradient_vector 
     
 
