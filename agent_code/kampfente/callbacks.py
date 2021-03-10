@@ -48,12 +48,15 @@ def act(self, game_state: dict) -> str:
     #self.logger.info(game_state['bombs'])
     random_prob = .1
     if self.train and random.random() < random_prob:
-        self.logger.debug("Choosing action purely at random.")
-        # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.2, .2, .2, .2, .1, .1])
+        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+        betas = list(self.model.values())
+        feature_vector = state_to_features(game_state)
+        
+        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        return move
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=self.model)
+    return np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.2,0.0])
 
 
 def state_to_features(game_state: dict) -> np.array:
