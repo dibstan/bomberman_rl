@@ -30,9 +30,13 @@ def setup_training(self):
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
     #self.history = {'UP' = [], 'RIGHT' = [], 'DOWN' = [], 'LEFT' = [], 'WAIT' = [], 'BOMB' = []}
-
-
-
+    try:
+        with open("my-saved-model.pt", "rb") as file:
+            self.model = pickle.load(file)
+    except:
+        self.model = None
+    self.temp_model = self.model
+    
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
     Called once per step to allow intermediate rewards based on game events.
@@ -53,7 +57,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
     self.logger.info(self_action)
     # Idea: Add your own events to hand out rewards
-    
+
     if ...:
         events.append(PLACEHOLDER_EVENT)
      
@@ -64,14 +68,14 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     
     #setting up model if necessary
     if self.model == None:
-        self.model = {'UP': [1 for i in range(len(new_state_vector))], 
-        'RIGHT': [1 for i in range(len(new_state_vector))], 'DOWN': [1 for i in range(len(new_state_vector))],
-        'LEFT': [1 for i in range(len(new_state_vector))], 'WAIT': [1 for i in range(len(new_state_vector))], 'BOMB': [1 for i in range(len(new_state_vector))]}
+        self.temp_model = {'UP': [random.random() for i in range(len(new_state_vector))], 
+        'RIGHT': [random.random() for i in range(len(new_state_vector))], 'DOWN': [random.random() for i in range(len(new_state_vector))],
+        'LEFT': [random.random() for i in range(len(new_state_vector))], 'WAIT': [random.random() for i in range(len(new_state_vector))], 'BOMB': [random.random() for i in range(len(new_state_vector))]}
     
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     if old_game_state is not None:
-        alpha = 1
-
+        alpha = .1
+        beta = .1
         old_state_vector = state_to_features(old_game_state)
 
     
@@ -80,8 +84,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         except:
             reward = 0
 
-        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + q_func(self,new_state_vector) - np.dot(old_state_vector, self.model[self_action]))
-        self.model[self_action] = self.model[self_action] + alpha/ 2 * gradient_vector 
+        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]))
+        self.temp_model[self_action] = self.temp_model[self_action] + alpha/ 2 * gradient_vector
     
 
     
@@ -101,7 +105,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
-
+    self.model = self.temp_model
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
@@ -115,11 +119,9 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 1,
+        e.COIN_COLLECTED: 100,
         e.KILLED_OPPONENT: 5,
-        e.MOVED_DOWN: 0.5,
-        e.MOVED_UP: 0.5,
-        PLACEHOLDER_EVENT: -.1  # idea: the custom event is bad
+        e.KILLED_SELF: -5  # idea: the custom event is bad
     }
     reward_sum = 0
     for event in events:
