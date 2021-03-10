@@ -17,6 +17,7 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 
 # Events
 PLACEHOLDER_EVENT = "PLACEHOLDER"
+WAITING_EVENT = "WAIT"
 
 def setup_training(self):
     """
@@ -36,6 +37,7 @@ def setup_training(self):
     except:
         self.model = None
     self.temp_model = self.model
+    print(self.model)
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -54,13 +56,14 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param new_game_state: The state the agent is in now.
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
+    #print(self.temp_model)
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
     self.logger.info(self_action)
     # Idea: Add your own events to hand out rewards
 
-    if ...:
-        events.append(PLACEHOLDER_EVENT)
-     
+    if self_action != "WAIT":
+        events.append(WAITING_EVENT)
+    
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
@@ -71,11 +74,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         self.temp_model = {'UP': [random.random() for i in range(len(new_state_vector))], 
         'RIGHT': [random.random() for i in range(len(new_state_vector))], 'DOWN': [random.random() for i in range(len(new_state_vector))],
         'LEFT': [random.random() for i in range(len(new_state_vector))], 'WAIT': [random.random() for i in range(len(new_state_vector))], 'BOMB': [random.random() for i in range(len(new_state_vector))]}
-    
+        self.model = self.temp_model
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     if old_game_state is not None:
-        alpha = .1
-        beta = .1
+        alpha = 0.1
+        beta = 1
         old_state_vector = state_to_features(old_game_state)
 
     
@@ -84,11 +87,13 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             
         except:
             reward = 0
+        #print(reward + beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]))
 
         gradient_vector = np.dot(np.transpose(old_state_vector) , reward + beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]))
+        print(gradient_vector)
         self.temp_model[self_action] = self.temp_model[self_action] + alpha/ 2 * gradient_vector
-    
-
+        #self.model = self.temp_model
+        #print(self.model)
     
 
 
@@ -110,12 +115,14 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     last_state_vector = state_to_features(last_game_state)
     reward = reward_from_events(self,events)
     alpha = .1
-
-    gradient_vector = np.dot(np.transpose(last_state_vector) , reward - np.dot(last_state_vector, self.temp_model[last_action]))
+    beta = 1
+    print(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]))
+    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]))
     self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
 
     # Store the model
     self.model = self.temp_model
+    #print(self.model)
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
@@ -130,7 +137,8 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 100,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -5  # idea: the custom event is bad
+        e.KILLED_SELF: -5,
+        WAITING_EVENT: 4  # idea: the custom event is bad
     }
     reward_sum = 0
     for event in events:
@@ -149,5 +157,6 @@ def q_func(self, X):
     q_array.append(np.dot(X, self.model["LEFT"]))
     q_array.append(np.dot(X, self.model["WAIT"]))
     q_array.append(np.dot(X, self.model["BOMB"]))
+    #print(max(q_array))
     return max(q_array)
 

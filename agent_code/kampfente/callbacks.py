@@ -32,7 +32,7 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-
+    print(self.model)
 
 def act(self, game_state: dict) -> str:
     """
@@ -47,13 +47,14 @@ def act(self, game_state: dict) -> str:
     self.logger.info(state_to_features(game_state))
     #self.logger.info(game_state['bombs'])
     random_prob = 1
+
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = list(self.model.values())
         feature_vector = state_to_features(game_state)
         
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        print('move',move)
+        print(move)
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.debug("Querying model for action.")
@@ -91,7 +92,7 @@ def state_to_features(game_state: dict) -> np.array:
         channels.append(np.concatenate((xy, [game_state['explosion_map'][xy[0]][xy[1]], None])))    # all coordinates and the current explosion state of that coordinate
     for i in range(len(game_state['bombs'])):
         channels.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1], game_state['bombs'][i][1], None])    # info about the bombs: xpos, ypos, timer'''
-    channels.append([game_state['self'][1], int(game_state['self'][2] == True), game_state['self'][3][0], game_state['self'][3][1], game_state['round'], game_state['step']])
+    channels.append([game_state['self'][1], int(game_state['self'][2] == True), game_state['self'][3][0], game_state['self'][3][1], game_state['round'], 0])#, game_state['step']])
     for xy in coordinates:
         field_state = game_state['field'][xy[0]][xy[1]]
         explosion_state = game_state['explosion_map'][xy[0]][xy[1]]
