@@ -53,7 +53,6 @@ def act(self, game_state: dict) -> str:
         feature_vector = state_to_features(game_state)
         
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        print(move)
         return move
 
     self.logger.debug("Querying model for action.")
@@ -63,6 +62,7 @@ def act(self, game_state: dict) -> str:
 def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
+
 
     Converts the game state to the input of your model, i.e.
     a feature vector.
