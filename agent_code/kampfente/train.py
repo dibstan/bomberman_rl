@@ -69,9 +69,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     
     #setting up model if necessary
     if self.model == None:
-        self.model = {'UP': [1 for i in range(len(old_game_state))], 
-        'RIGHT': [1 for i in range(len(old_game_state))], 'DOWN': [1 for i in range(len(old_game_state))],
-         'LEFT': [1 for i in range(len(old_game_state))], 'WAIT': [1 for i in range(len(old_game_state))], 'BOMB': [1 for i in range(len(old_game_state))]}
+        self.model = {'UP': [1 for i in range(len(new_game_state))], 
+        'RIGHT': [1 for i in range(len(new_game_state))], 'DOWN': [1 for i in range(len(new_game_state))],
+         'LEFT': [1 for i in range(len(new_game_state))], 'WAIT': [1 for i in range(len(new_game_state))], 'BOMB': [1 for i in range(len(new_game_state))]}
 
     
     reward = reward_from_events(events)
