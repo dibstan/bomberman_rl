@@ -16,7 +16,7 @@ TRANSITION_HISTORY_SIZE = 100  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 
 # Events
-PLACEHOLDER_EVENT = "PLACEHOLDER"
+WAITING_EVENT = "WAIT"
 
 def setup_training(self):
     """
@@ -57,8 +57,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.info(self_action)
     # Idea: Add your own events to hand out rewards
 
-    if ...:
-        events.append(PLACEHOLDER_EVENT)
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
 
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
@@ -95,12 +95,18 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 100,
+        e.COIN_COLLECTED: 200,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -5  # idea: the custom event is bad
-
+        e.KILLED_SELF: -300,
+        WAITING_EVENT: -50,
+        e.INVALID_ACTION: -80,
+        e.MOVED_LEFT: -50,
+        e.MOVED_RIGHT: -50,
+        e.MOVED_UP: -50,
+        e.MOVED_DOWN: -50,
     }
     reward_sum = 0
+    
     for event in events:
         if event in game_rewards:
             reward_sum += game_rewards[event]
@@ -119,8 +125,8 @@ def experience_replay(self):
         if move is not None:
             B[moves[move]].append(transition)
 
-    alpha = 0.2     # training rate
-    gamma = 0.2     # discount rate
+    alpha = 1     # training rate
+    gamma = 1    # discount rate
 
     model = {'UP':[],'RIGHT':[],'DOWN':[], 'LEFT':[], 'WAIT':[], 'BOMB':[]}
     
@@ -139,10 +145,10 @@ def experience_replay(self):
             
                             
             Y = np.dot(X, self.model[moves_inv[i]])
-            print(Y)
-            print(Y_TD)
-            self.model[moves_inv[i]] = self.model[moves_inv[i]]+alpha*np.sum(np.dot(np.transpose(X), (Y_TD-Y)))
-    
+            #print(Y_TD-Y)
+            #print(np.dot(np.transpose(X), (Y_TD-Y)))
+            self.model[moves_inv[i]] = self.model[moves_inv[i]]+alpha*np.clip(np.dot(np.transpose(X), (Y_TD-Y)),-10,10)
+    print(self.model)
     
     
 
