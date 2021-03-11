@@ -41,7 +41,7 @@ def main(args):
     play_parser.add_argument("--continue-without-training", default=False, action="store_true")
     # play_parser.add_argument("--single-process", default=False, action="store_true")
 
-    play_parser.add_argument("--n-rounds", type=int, default=10, help="How many rounds to play")
+    play_parser.add_argument("--n-rounds", type=int, default=10, help="How many rounds to play")                           #changed
     play_parser.add_argument("--save-replay", default=False, action="store_true", help="Store the game as .pt for a replay")
     play_parser.add_argument("--no-gui", default=False, action="store_true", help="Deactivate the user interface and play as fast as possible.")
 

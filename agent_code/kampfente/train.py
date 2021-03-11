@@ -18,6 +18,7 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 # Events
 PLACEHOLDER_EVENT = "PLACEHOLDER"
 WAITING_EVENT = "WAIT"
+COIN_CHASER = "CLOSER_TO_COIN"
 
 def setup_training(self):
     """
@@ -37,7 +38,7 @@ def setup_training(self):
     except:
         self.model = None
     self.temp_model = self.model
-    print(self.model)
+    #print(self.model["RIGHT"][np.where(self.model["RIGHT"]!= 0)])
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -57,12 +58,14 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
     #print(self.temp_model)
-    self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
-    self.logger.info(self_action)
+    #self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
+    #self.logger.info(self_action)
     # Idea: Add your own events to hand out rewards
 
-    if self_action != "WAIT":
+    if self_action == "WAIT":
         events.append(WAITING_EVENT)
+    
+    
     
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
@@ -71,28 +74,44 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     
     #setting up model if necessary
     if self.model == None:
-        self.temp_model = {'UP': [random.random() for i in range(len(new_state_vector))], 
-        'RIGHT': [random.random() for i in range(len(new_state_vector))], 'DOWN': [random.random() for i in range(len(new_state_vector))],
-        'LEFT': [random.random() for i in range(len(new_state_vector))], 'WAIT': [random.random() for i in range(len(new_state_vector))], 'BOMB': [random.random() for i in range(len(new_state_vector))]}
+        init_beta = np.zeros(len(new_state_vector))
+        self.temp_model = {'UP': init_beta, 
+        'RIGHT': init_beta, 'DOWN': init_beta,
+        'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
+
+        #print(np.where(self.temp_model["RIGHT"] != 0))
+        #print(init_beta[np.where(init_beta != 0)])
         self.model = self.temp_model
+    
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     if old_game_state is not None:
         alpha = 0.1
         beta = 1
         old_state_vector = state_to_features(old_game_state)
 
-    
+        # Auxillary reward for getting closer to closest coin
+        coins = np.arange(4, len(new_state_vector), 5)
+        coin_dist_old = old_state_vector[coins]
+        coin_dist_new = new_state_vector[coins]
+
+        if max(coin_dist_new) > max(coin_dist_old):
+            events.append(COIN_CHASER)
+        #print(max(coin_dist_new))
+
+
         try:
             reward = reward_from_events(self,events)
             
         except:
             reward = 0
-        #print(reward + beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]))
-
-        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]))
-        print(gradient_vector)
+        print(np.dot(old_state_vector, self.temp_model[self_action]))
+        
+        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + np.clip(beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]), -50, 50))
+        #self.logger.info(gradient_vector)
+        #print(np.where(gradient_vector != 0))
         self.temp_model[self_action] = self.temp_model[self_action] + alpha/ 2 * gradient_vector
-        #self.model = self.temp_model
+        
+        self.model = self.temp_model
         #print(self.model)
     
 
@@ -109,17 +128,16 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     :param self: The same object that is passed to all of your callbacks.
     """
-    self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
+    #self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
     
     last_state_vector = state_to_features(last_game_state)
     reward = reward_from_events(self,events)
     alpha = .1
     beta = 1
-    print(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]))
-    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]))
+    #print(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]))
+    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + np.clip(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]),-50,50))
     self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
-
     # Store the model
     self.model = self.temp_model
     #print(self.model)
@@ -135,10 +153,16 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 100,
+        e.COIN_COLLECTED: 1000,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -5,
-        WAITING_EVENT: 4  # idea: the custom event is bad
+        e.KILLED_SELF: -300,
+        WAITING_EVENT: -100,
+        e.INVALID_ACTION: -100,
+        e.MOVED_DOWN: -40,
+        e.MOVED_LEFT: -40,
+        e.MOVED_RIGHT: -40,
+        e.MOVED_UP: -40,
+        COIN_CHASER: 30  # idea: the custom event is bad
     }
     reward_sum = 0
     for event in events:
