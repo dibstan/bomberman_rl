@@ -31,14 +31,21 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    #self.history = {'UP' = [], 'RIGHT' = [], 'DOWN' = [], 'LEFT' = [], 'WAIT' = [], 'BOMB' = []}
+    try:
+        with open("saved_states.pt", "rb") as file:
+            self.states = pickle.load(file)
+    except:
+        self.states = []
+    print(np.shape(self.states))
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
     except:
         self.model = None
     self.temp_model = self.model
+    #print(self.states)
     #print(self.model["RIGHT"][np.where(self.model["RIGHT"]!= 0)])
+    #self.pca = PCA(self)
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -57,30 +64,26 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param new_game_state: The state the agent is in now.
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
-    #print(self.temp_model)
-    #self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
-    #self.logger.info(self_action)
+    
     # Idea: Add your own events to hand out rewards
-
     if self_action == "WAIT":
         events.append(WAITING_EVENT)
-    
-    
     
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
     new_state_vector = state_to_features(new_game_state)
     
+    #new_state_vector = np.dot(self.pca, new_state_vector)
+    #saving new_game_state in self.states
+    self.states.append(new_state_vector)
+
     #setting up model if necessary
     if self.model == None:
         init_beta = np.zeros(len(new_state_vector))
         self.temp_model = {'UP': init_beta, 
         'RIGHT': init_beta, 'DOWN': init_beta,
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
-
-        #print(np.where(self.temp_model["RIGHT"] != 0))
-        #print(init_beta[np.where(init_beta != 0)])
         self.model = self.temp_model
     
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
@@ -88,7 +91,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         alpha = 0.1
         beta = 1
         old_state_vector = state_to_features(old_game_state)
-
+        #old_state_vector = np.dot(self.pca, old_state_vector)
         # Auxillary reward for getting closer to closest coin
         coins = np.arange(4, len(new_state_vector), 5)
         coin_dist_old = old_state_vector[coins]
@@ -96,23 +99,18 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
         if max(coin_dist_new) > max(coin_dist_old):
             events.append(COIN_CHASER)
-        #print(max(coin_dist_new))
-
 
         try:
             reward = reward_from_events(self,events)
             
         except:
             reward = 0
-        print(np.dot(old_state_vector, self.temp_model[self_action]))
+        #print(np.dot(old_state_vector, self.temp_model[self_action]))
         
         gradient_vector = np.dot(np.transpose(old_state_vector) , reward + np.clip(beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]), -50, 50))
-        #self.logger.info(gradient_vector)
-        #print(np.where(gradient_vector != 0))
+        print(np.shape(gradient_vector))
         self.temp_model[self_action] = self.temp_model[self_action] + alpha/ 2 * gradient_vector
-        
         self.model = self.temp_model
-        #print(self.model)
     
 
 
@@ -128,21 +126,26 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     :param self: The same object that is passed to all of your callbacks.
     """
-    #self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
+    
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
     
     last_state_vector = state_to_features(last_game_state)
+    #last_state_vector = np.dot(self.pca, last_state_vector)
     reward = reward_from_events(self,events)
     alpha = .1
     beta = 1
-    #print(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]))
+
     gradient_vector = np.dot(np.transpose(last_state_vector) , reward + np.clip(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]),-50,50))
     self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
     # Store the model
     self.model = self.temp_model
-    #print(self.model)
+
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
+
+
+    with open("saved_states.pt", "wb") as file:
+        pickle.dump(self.states, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -181,6 +184,23 @@ def q_func(self, X):
     q_array.append(np.dot(X, self.model["LEFT"]))
     q_array.append(np.dot(X, self.model["WAIT"]))
     q_array.append(np.dot(X, self.model["BOMB"]))
-    #print(max(q_array))
     return max(q_array)
 
+def PCA(self):
+    from sklearn.preprocessing import StandardScaler
+    states = self.states
+    print(np.shape(states))
+    states_std = states - np.mean(states, axis = 0)
+    
+
+    states_cov = np.cov(np.transpose(states))
+
+    eig_vals, eig_vecs = np.linalg.eig(states_cov)
+    idx = eig_vals.argsort()[::-1]
+    eig_vals = eig_vals[idx]
+    eig_vecs = eig_vecs[:,idx]
+
+    ind = np.ceil(1/3*len(eig_vecs)) 
+    eig_vecs = eig_vecs[:500]
+    
+    return eig_vecs

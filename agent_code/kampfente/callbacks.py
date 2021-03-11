@@ -33,6 +33,16 @@ def setup(self):
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
 
+    #saving states
+    if self.train and not os.path.isfile("saved_states.pt"):
+        self.logger.info("New State-Saver")
+        ##weights = np.random.rand(len(ACTIONS))
+        self.states = [] ## weights / weights.sum()
+    else:
+        self.logger.info("Loading saved  states.")
+        with open("saved_states.pt", "rb") as file:
+            self.states = pickle.load(file)
+    
 
 def act(self, game_state: dict) -> str:
     """
@@ -45,8 +55,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    #self.logger.info(game_state['bombs'])
-    random_prob = 0.9
+    random_prob = 0
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
