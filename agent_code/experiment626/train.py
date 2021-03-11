@@ -114,7 +114,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     gradient_vector = np.dot(np.transpose(last_state_vector) , reward - np.dot(last_state_vector, self.temp_model[last_action]))
     self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
-
+    
     # Store the model
     self.model = self.temp_model
     with open("my-saved-model.pt", "wb") as file:
@@ -129,9 +129,9 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 10,
+        e.COIN_COLLECTED: 100,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -100  # idea: the custom event is bad
+        e.KILLED_SELF: -200  # idea: the custom event is bad
     
     }
     reward_sum = 0
