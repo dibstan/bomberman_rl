@@ -80,7 +80,7 @@ def state_to_features(game_state: dict) -> np.array:
         return None
     # For example, you could construct several channels of equal shape, ...
     b = 5                           #number of features per pixel
-    channels = np.zeros((17*17,b))  #here rows are pixels and colums certain features
+    channels = np.zeros((17*17,b))  #here rows are flattned pixels and colums are certain features for each pixel
     
     #first learn field parameters(crate,wall,tile)
     tile_values = np.stack(game_state['field']).reshape(-1) #flatten field matrix
@@ -101,7 +101,9 @@ def state_to_features(game_state: dict) -> np.array:
     #position of bombs and their timers as 'danger' values, existing explosion maps
     for bomb in game_state['bombs']:
         bomb_coor = bomb[0]
-        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future      
+
+        #also get tiles exploding in the near future
+        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future
         channels[bomb_coor_flat,3] = 4-bomb[1]/4            #danger level = time steps passed / time needed to explode
 
     explosion_map = game_state['explosion_map'].flatten()
@@ -110,8 +112,11 @@ def state_to_features(game_state: dict) -> np.array:
 
     #position of coins
     for coin in game_state['coins']:
+        A = 5                                      #hyperparameter indicating weight for nearest coins
+        max_distance = np.linalg.norm([15,15])     #max distance player-coin 
+        coin_distance = np.linalg.norm(np.subtract(game_state['self'][3], coin))   #get the distance to the player 
         coin_coor_flat = 17 * coin[0] + coin[1]
-        channels[coin_coor_flat,4] = 1
+        channels[coin_coor_flat,4] = A * coin_distance / max_distance
     
     
     # concatenate them as a feature tensor (they must have the same shape), ...
@@ -119,3 +124,9 @@ def state_to_features(game_state: dict) -> np.array:
     # and return them as a vector
     
     return stacked_channels #stacked_channels.reshape(-1)
+
+
+
+            
+
+
