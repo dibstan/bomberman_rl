@@ -4,7 +4,7 @@ import random
 import sklearn as sk
 from sklearn.feature_extraction import DictVectorizer
 import numpy as np
-from itertools import product
+
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -78,7 +78,7 @@ def state_to_features(game_state: dict) -> np.array:
 
     if game_state is None:
         return None
-    if game_state['step']==1 and game_state['round']==1 :
+    if game_state['step']==1 and game_state['round']==1 :  
         global exploding_tiles_map
         exploding_tiles_map = get_all_exploding_tiles(game_state['field'])  #dict where keys are tuples
   
@@ -130,6 +130,9 @@ def state_to_features(game_state: dict) -> np.array:
 def get_all_exploding_tiles(field) -> dict:
     '''
     For each pixel where we can place a bomb, we search all the tiles blowing up with that bomb
+
+    The function is rather complicated, so we just call it once in state_to features in the 
+    beginning as a global varable
 
     :param field: input must be game_state_field (state itself is arbitrary)
     :return: dict where keys are coordinate tuples and values arrays of flattened coordinates
