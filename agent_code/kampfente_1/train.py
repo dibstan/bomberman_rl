@@ -156,7 +156,7 @@ def experience_replay(self):
                 
                 Y_TD.append(B[action]['rewards'][i])
 
-                Y.append(np.dot(self.model[move], X[i]))
+                Y.append(np.dot(self.model[action], X[i]))
 
         if X != []:
             

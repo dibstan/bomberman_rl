@@ -36,7 +36,7 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    #self.fitted == False
+    
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
@@ -44,8 +44,7 @@ def setup_training(self):
     except:
         self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
         'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
-        for move in self.model:
-            self.model[]
+        
         
 
     
@@ -112,7 +111,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -500,
         WAITING_EVENT: -200,
-        e.INVALID_ACTION: -600
+        e.INVALID_ACTION: -1000
     }
     reward_sum = 0
     for event in events:
@@ -140,6 +139,6 @@ def experience_replay(self):
 
         if X != [] and Y != []:
             self.model[action].fit(X,Y)
-           # print(self.model)
+           
 
 
