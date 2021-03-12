@@ -33,7 +33,7 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    #self.history = {'UP' = [], 'RIGHT' = [], 'DOWN' = [], 'LEFT' = [], 'WAIT' = [], 'BOMB' = []}
+    
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
@@ -93,18 +93,20 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         alpha = .1
         beta = .1
 
-        #define coin event
         old_state_vector = state_to_features(old_game_state)
-        coins = np.arange(4, len(new_state_vector), 5)
-        coin_dist_old = old_state_vector[coins]
-        coin_dist_new = new_state_vector[coins]
 
-        if max(coin_dist_new) > max(coin_dist_old):
+        #define coin event
+        old_player_coor = old_game_state['self'][3]     #get positions of the player
+        new_player_coor = new_game_state['self'][3]
+        
+        coin_coordinates = old_game_state['coins']
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor),axis=0)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor),axis=0)
+
+        if max(new_coin_distances) > max(old_coin_distances):   #if the distance to closest coin got smaller
             events.append(COIN_CHASER)
 
         #define events with bombs
-        old_player_coor = old_game_state['self'][3]
-        new_player_coor = new_game_state['self'][3]
         old_bomb_coors = old_game_state['bombs']
 
         dangerous_tiles = []
