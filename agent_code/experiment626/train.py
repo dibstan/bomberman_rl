@@ -76,24 +76,6 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if self.exploding_tiles_map == None :  
         self.exploding_tiles_map = get_all_exploding_tiles(new_game_state['field'])  #dict where keys are tuples
     
-    #get the coordinates of the bombs and the player
-    old_player_coor = old_game_state['self'][3]
-    new_player_coor = new_game_state['self'][3]
-    old_bomb_coors = old_game_state['bombs'][:,0]
-
-    dangerous_tiles = []
-    for bomb in old_bomb_coors:
-        dangerous_tiles.append(self.exploding_tiles_map(bomb))
-    
-    if dangerous_tiles != []:
-        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
-            events.append(MOVED_AWAY_FROM_BOMB)
-        if old_player_coor in dangerous_tiles and self_action == "WAIT":
-            events.append(WAITED_IN_EXPLOSION_RANGE)
-        
-    
-
-
 
     if self_action == "WAIT":
         events.append(WAITING_EVENT)
@@ -105,6 +87,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         'RIGHT': init_beta, 'DOWN': init_beta,
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
         self.model = self.temp_model
+        
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     if old_game_state is not None:
         alpha = .1
@@ -122,11 +105,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         #define events with bombs
         old_player_coor = old_game_state['self'][3]
         new_player_coor = new_game_state['self'][3]
-        old_bomb_coors = old_game_state['bombs'][:,0]
+        old_bomb_coors = old_game_state['bombs']
 
         dangerous_tiles = []
         for bomb in old_bomb_coors:
-            dangerous_tiles.append(self.exploding_tiles_map(bomb))
+            dangerous_tiles.append(self.exploding_tiles_map[bomb[0]])
         
         if dangerous_tiles != []:
             if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
