@@ -192,7 +192,7 @@ def experience_replay(self):
 
         if self.model is not None:
             for i in range(N):
-
+                
                 if B[action]['next_states'][i] is not None:     # not terminal state
                     
                     # computing the reward for the state according to temporal difference

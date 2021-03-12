@@ -10,11 +10,8 @@ MAX_AGENTS = 1
 # original: 4
 
 # Round properties
-<<<<<<< HEAD
 MAX_STEPS = 400
-=======
-MAX_STEPS = 400 #400
->>>>>>> 93816ebab62a2e7ef117c40ec58ccd64668e170c
+
 
 # GUI properties
 GRID_SIZE = 30
