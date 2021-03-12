@@ -14,6 +14,8 @@ Transition = namedtuple('Transition',
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 100  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
+GAMMA = 0.3 # discount rate
+ALPHA = 0.5 # learning rate
 
 # Events
 WAITING_EVENT = "WAIT"
@@ -114,40 +116,54 @@ def reward_from_events(self, events: List[str]) -> int:
     return reward_sum
 
 def experience_replay(self):
-    #updating the model using batched gradient decent
-    moves = {'UP':0, 'RIGHT':1, 'DOWN':2,'LEFT':3, 'WAIT':4, 'BOMB':5}
-    moves_inv = {v: k for k, v in moves.items()}
+    self.logger.debug('Doing experience replay with the collected data.')
 
-    B = [[] for i in range(6)]  # creating the batches for each action from the transition data
+    # creating the training batches from the transition history
+    B = {'UP':{'states':[], 'rewards':[], 'next_states':[]}, 'RIGHT':{'states':[], 'rewards':[], 'next_states':[]}, 'DOWN':{'states':[], 'rewards':[], 'next_states':[]}, 
+    'LEFT':{'states':[], 'rewards':[], 'next_states':[]}, 'WAIT':{'states':[], 'rewards':[], 'next_states':[]}, 'BOMB':{'states':[], 'rewards':[], 'next_states':[]}}
 
     for transition in self.transitions:
-        move = transition.action
-        if move is not None:
-            B[moves[move]].append(transition)
+        if transition.action is not None:
+            B[transition.action]['states'].append(transition.state)
+            B[transition.action]['rewards'].append(transition.reward)
+            B[transition.action]['next_states'].append(transition.next_state)
 
-    alpha = 1     # training rate
-    gamma = 1    # discount rate
+    for action in B:
+        X = B[action]['states']
+        Y_TD = []
+        Y = []
+        N = len(X)
 
-    model = {'UP':[],'RIGHT':[],'DOWN':[], 'LEFT':[], 'WAIT':[], 'BOMB':[]}
-    
-    for i in range(6):
+        for i in range(N):
 
-        if B[i] != []:
+            if B[action]['next_states'][i] is not None:     # not terminal state
+                
+                # computing the reward for the stae according to temporal difference
+                q_value_future = []
 
-            X = []
-            next_state = []
-            Y_TD = []
-            for data in B[i]:
-                if data.next_state is not None:
-                    X.append(data.state)
-                    Y_TD.append(data.reward+gamma*q_func(self, data.next_state))
-                    
+                for move in self.model:
+                    q_value_future.append(np.dot(self.model[move],B[action]['next_states'][i]))
+
+                future_reward = np.max(q_value_future)
+
+                
+                Y_TD.append(B[action]['rewards'][i] + GAMMA * future_reward)
+                
+                # computing the predicted reward
+                Y.append(np.dot(self.model[move], X[i]))
+
+            else:   # terminal state
+                
+                Y_TD.append(B[action]['rewards'][i])
+
+                Y.append(np.dot(self.model[move], X[i]))
+
+        if X != []:
             
-                            
-            Y = np.dot(X, self.model[moves_inv[i]])
-            #print(Y_TD-Y)
-            #print(np.dot(np.transpose(X), (Y_TD-Y)))
-            self.model[moves_inv[i]] = self.model[moves_inv[i]]+alpha*np.clip(np.dot(np.transpose(X), (Y_TD-Y)),-10,10)
+            DESC  = np.dot(np.transpose(X), np.array(Y_TD)-np.array(Y))    # gradient descent
+
+            self.model[action] = self.model[action] + ALPHA * DESC
+
     print(self.model)
     
     
