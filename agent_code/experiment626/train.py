@@ -93,12 +93,12 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
                 events.append(MOVED_AWAY_FROM_BOMB)
             if old_player_coor in dangerous_tiles and self_action == "WAIT":
+                print('waited')
                 events.append(WAITED_IN_EXPLOSION_RANGE)
             if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+                print('invalid')
                 events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
             
-        
-
     # appending gamestate to history
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
 
@@ -222,5 +222,5 @@ def experience_replay(self):
                 self.model[action] = self.model[action] + ALPHA * DESC
                 
 
-    print(self.model)
+    #print(np.where(self.model['UP']!=0)) 
 
