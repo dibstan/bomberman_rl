@@ -18,11 +18,10 @@ GAMMA = 0.3 # discount rate
 ALPHA = 0.5 # learning rate
 
 # Events
-
+WAITING_EVENT = "WAIT"
 COIN_CHASER = "CLOSER_TO_COIN"
 MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
 WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
-INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
@@ -65,6 +64,11 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
     self.logger.info(self_action)
 
+
+    # Auxillary events
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+
     
     #define auxillary events depending on the transition
     if old_game_state is not None:
@@ -84,21 +88,17 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         #define events with bombs
         old_bomb_coors = old_game_state['bombs']
 
-        dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+        dangerous_tiles = []
         for bomb in old_bomb_coors:
-            for coor in self.exploding_tiles_map[bomb[0]]:
-                dangerous_tiles.append(coor)
-
-        if dangerous_tiles != []:       
+            dangerous_tiles.append(self.exploding_tiles_map[bomb[0]])
+        
+        if dangerous_tiles != []:
             if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
                 events.append(MOVED_AWAY_FROM_BOMB)
             if old_player_coor in dangerous_tiles and self_action == "WAIT":
-                print('waited')
                 events.append(WAITED_IN_EXPLOSION_RANGE)
-            if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
-                print('invalid')
-                events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
-            
+        
+
     # appending gamestate to history
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
 
@@ -135,23 +135,21 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 500,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -500,
-        e.WAITED: -100,
+        e.KILLED_SELF: -300,
+        WAITING_EVENT: -100,
         e.INVALID_ACTION: -100,
-        e.MOVED_DOWN: -40,
-        e.MOVED_LEFT: -40,
-        e.MOVED_RIGHT: -40,
-        e.MOVED_UP: -40,
+        #e.MOVED_DOWN: -40,
+        #e.MOVED_LEFT: -40,
+        #e.MOVED_RIGHT: -40,
+        #e.MOVED_UP: -40,
         COIN_CHASER: 50,
         MOVED_AWAY_FROM_BOMB: 50,
-        WAITED_IN_EXPLOSION_RANGE: -200,
-        INVALID_ACTION_IN_EXPLOSION_RANGE: -200  
+        WAITED_IN_EXPLOSION_RANGE: -100  
     
     }
     reward_sum = 0
     
     for event in events:
-        #if event == 'INVALID_ACTION': print('invalid')
         if event in game_rewards:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
@@ -222,5 +220,5 @@ def experience_replay(self):
                 self.model[action] = self.model[action] + ALPHA * DESC
                 
 
-    #print(np.where(self.model['UP']!=0)) 
+    print(self.model)
 

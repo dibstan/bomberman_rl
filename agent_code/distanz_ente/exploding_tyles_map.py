@@ -38,7 +38,7 @@ def get_all_exploding_tiles(field) -> dict:
         for j in range(17):
             if field[i,j] == -1:
                 continue
-            coors_ij=[(i,j)]
+            coors_ij=[17*i + j]
 
             #first consider walking to the right, stop when encounter -1 or after 3 steps
             k,l = i,j
@@ -61,8 +61,7 @@ def get_all_exploding_tiles(field) -> dict:
                 k+=1
                 coors_ij.append((k,l))
             
-            exploding_tiles[(i,j)] = coors_ij
-            #print(exploding_tiles[(i,j)])
+            exploding_tiles[(i,j)] = np.array(coors_ij, dtype=object)
 
     return exploding_tiles
 

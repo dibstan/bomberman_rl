@@ -54,11 +54,11 @@ def act(self, game_state: dict) -> str:
         feature_vector = state_to_features(game_state)
         
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        print(move)
+        #print(move)
         return move
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.2,.0])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -112,11 +112,8 @@ def state_to_features(game_state: dict) -> np.array:
 
     #position of coins
     for coin in game_state['coins']:
-        A = 5                                      #hyperparameter indicating weight for nearest coins
-        max_distance = np.linalg.norm([15,15])     #max distance player-coin 
-        coin_distance = np.linalg.norm(np.subtract(game_state['self'][3], coin))   #get the distance to the player 
         coin_coor_flat = 17 * coin[0] + coin[1]
-        channels[coin_coor_flat,4] = A * coin_distance / max_distance
+        channels[coin_coor_flat,4] = 1
     
     
     # concatenate them as a feature tensor (they must have the same shape), ...
