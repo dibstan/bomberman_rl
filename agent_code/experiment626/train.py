@@ -17,6 +17,10 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 
 # Events
 PLACEHOLDER_EVENT = "PLACEHOLDER"
+WAITING_EVENT = "WAIT"
+COIN_CHASER = "CLOSER_TO_COIN"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
@@ -36,6 +40,7 @@ def setup_training(self):
     except:
         self.model = None
     self.temp_model = self.model
+    self.exploding_tiles_map = None
 
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -59,27 +64,77 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.info(self_action)
     # Idea: Add your own events to hand out rewards
 
-    if ...:
-        events.append(PLACEHOLDER_EVENT)
+    
      
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
     new_state_vector = state_to_features(new_game_state)
+
+    #first we need to get the exposion map of each bomb to determine 'bad' tiles
+    #this is fixed thoughout every game, so we just calculate it once
+    if self.exploding_tiles_map == None :  
+        self.exploding_tiles_map = get_all_exploding_tiles(new_game_state['field'])  #dict where keys are tuples
+    
+    #get the coordinates of the bombs and the player
+    old_player_coor = old_game_state['self'][3]
+    new_player_coor = new_game_state['self'][3]
+    old_bomb_coors = old_game_state['bombs'][:,0]
+
+    dangerous_tiles = []
+    for bomb in old_bomb_coors:
+        dangerous_tiles.append(self.exploding_tiles_map(bomb))
+    
+    if dangerous_tiles != []:
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_AWAY_FROM_BOMB)
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
+            events.append(WAITED_IN_EXPLOSION_RANGE)
+        
+    
+
+
+
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
     
     #setting up model if necessary
     if self.model == None:
-        self.temp_model = {'UP': [random.random() for i in range(len(new_state_vector))], 
-        'RIGHT': [random.random() for i in range(len(new_state_vector))], 'DOWN': [random.random() for i in range(len(new_state_vector))],
-        'LEFT': [random.random() for i in range(len(new_state_vector))], 'WAIT': [random.random() for i in range(len(new_state_vector))], 'BOMB': [random.random() for i in range(len(new_state_vector))]}
+        init_beta = np.zeros(len(new_state_vector))
+        self.temp_model = {'UP': init_beta, 
+        'RIGHT': init_beta, 'DOWN': init_beta,
+        'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
         self.model = self.temp_model
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     if old_game_state is not None:
         alpha = .1
         beta = .1
-        old_state_vector = state_to_features(old_game_state)
 
-    
+        #define coin event
+        old_state_vector = state_to_features(old_game_state)
+        coins = np.arange(4, len(new_state_vector), 5)
+        coin_dist_old = old_state_vector[coins]
+        coin_dist_new = new_state_vector[coins]
+
+        if max(coin_dist_new) > max(coin_dist_old):
+            events.append(COIN_CHASER)
+
+        #define events with bombs
+        old_player_coor = old_game_state['self'][3]
+        new_player_coor = new_game_state['self'][3]
+        old_bomb_coors = old_game_state['bombs'][:,0]
+
+        dangerous_tiles = []
+        for bomb in old_bomb_coors:
+            dangerous_tiles.append(self.exploding_tiles_map(bomb))
+        
+        if dangerous_tiles != []:
+            if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+                events.append(MOVED_AWAY_FROM_BOMB)
+            if old_player_coor in dangerous_tiles and self_action == "WAIT":
+                events.append(WAITED_IN_EXPLOSION_RANGE)
+        
+    #get the rewards
         try:
             reward = reward_from_events(self,events)
             
@@ -129,9 +184,18 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 100,
+        e.COIN_COLLECTED: 1000,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -200  # idea: the custom event is bad
+        e.KILLED_SELF: -300,
+        WAITING_EVENT: -100,
+        e.INVALID_ACTION: -100,
+        e.MOVED_DOWN: -40,
+        e.MOVED_LEFT: -40,
+        e.MOVED_RIGHT: -40,
+        e.MOVED_UP: -40,
+        COIN_CHASER: 30,
+        MOVED_AWAY_FROM_BOMB: 40,
+        WAITED_IN_EXPLOSION_RANGE: -100  
     
     }
     reward_sum = 0
@@ -152,4 +216,52 @@ def q_func(self, X):
     q_array.append(np.dot(X, self.model["WAIT"]))
     q_array.append(np.dot(X, self.model["BOMB"]))
     return max(q_array)
+
+
+
+def get_all_exploding_tiles(field) -> dict:
+    '''
+    For each pixel where we can place a bomb, we search all the tiles blowing up with that bomb
+
+    The function is rather complicated, so we just call it once in state_to features in the 
+    beginning as a global varable
+
+    :param field: input must be game_state_field (state itself is arbitrary)
+    :return: dict where keys are coordinate tuples and values arrays of flattened coordinates
+    '''
+    
+    np.where(field == -1,-1,0)     #set all walls to -1, rest to 0
+    
+    exploding_tiles = {}
+
+    for i in range(17):
+        for j in range(17):
+            if field[i,j] == -1:
+                continue
+            coors_ij=[17*i + j]
+
+            #first consider walking to the right, stop when encounter -1 or after 3 steps
+            k,l = i,j
+            while (field[k,l+1] !=-1) and np.abs(l-j)<3:
+                l+=1
+                coors_ij.append((k,l))
+            #walking left:
+            k,l = i,j
+            while (field[k,l-1] !=-1) and np.abs(l-j)<3:
+                l-=1
+                coors_ij.append((k,l))
+            #walking up:
+            k,l = i,j
+            while (field[k-1,l] !=-1) and np.abs(k-i)<3:
+                k-=1
+                coors_ij.append((k,l))
+            #walking down
+            k,l = i,j
+            while (field[k+1,l] !=-1) and np.abs(k-i)<3:
+                k+=1
+                coors_ij.append((k,l))
+            
+            exploding_tiles[(i,j)] = np.array(coors_ij)
+
+    return exploding_tiles
 

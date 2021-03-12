@@ -78,9 +78,6 @@ def state_to_features(game_state: dict) -> np.array:
 
     if game_state is None:
         return None
-    if game_state['step']==1 and game_state['round']==1 :  
-        global exploding_tiles_map
-        exploding_tiles_map = get_all_exploding_tiles(game_state['field'])  #dict where keys are tuples
   
     b = 5                           #number of features per pixel
     channels = np.zeros((17*17,b))  #here rows are flattned pixels and colums are certain features for each pixel
@@ -103,8 +100,9 @@ def state_to_features(game_state: dict) -> np.array:
 
     #position of bombs and their timers as 'danger' values, existing explosion maps
     for bomb in game_state['bombs']:
-        bomb_coor = bomb[0]                                         #now assign danger value to all exploding tiles
-        channels[exploding_tiles_map[bomb_coor],3] = 4-bomb[1]/4    #danger level = time steps passed / time needed to explode
+        bomb_coor = bomb[0]                                        
+        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]
+        channels[bomb_coor_flat,3] = 4-bomb[1]/4    #danger level = time steps passed / time needed to explode
 
     explosion_map = game_state['explosion_map'].flatten()
     channels[np.where(explosion_map == 2),3] = 1
@@ -127,51 +125,6 @@ def state_to_features(game_state: dict) -> np.array:
 
 
 
-def get_all_exploding_tiles(field) -> dict:
-    '''
-    For each pixel where we can place a bomb, we search all the tiles blowing up with that bomb
-
-    The function is rather complicated, so we just call it once in state_to features in the 
-    beginning as a global varable
-
-    :param field: input must be game_state_field (state itself is arbitrary)
-    :return: dict where keys are coordinate tuples and values arrays of flattened coordinates
-    '''
-    
-    np.where(field == -1,-1,0)     #set all walls to -1, rest to 0
-    
-    exploding_tiles = {}
-
-    for i in range(17):
-        for j in range(17):
-            if field[i,j] == -1:
-                continue
-            coors_ij=[17*i + j]
-
-            #first consider walking to the right, stop when encounter -1 or after 3 steps
-            k,l = i,j
-            while (field[k,l+1] !=-1) and np.abs(l-j)<3:
-                l+=1
-                coors_ij.append(17*k+l)
-            #walking left:
-            k,l = i,j
-            while (field[k,l-1] !=-1) and np.abs(l-j)<3:
-                l-=1
-                coors_ij.append(17*k+l)
-            #walking up:
-            k,l = i,j
-            while (field[k-1,l] !=-1) and np.abs(k-i)<3:
-                k-=1
-                coors_ij.append(17*k+l)
-            #walking down
-            k,l = i,j
-            while (field[k+1,l] !=-1) and np.abs(k-i)<3:
-                k+=1
-                coors_ij.append(17*k+l)
-            
-            exploding_tiles[(i,j)] = np.array(coors_ij)
-
-    return exploding_tiles
 
 
 
