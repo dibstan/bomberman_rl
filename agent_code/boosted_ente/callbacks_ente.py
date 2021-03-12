@@ -5,6 +5,9 @@ import sklearn as sk
 from sklearn.feature_extraction import DictVectorizer
 import numpy as np
 from itertools import product
+from sklearn.datasets import make_regression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import train_test_split
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -33,10 +36,6 @@ def setup(self):
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
 
-    # This code needs to be executed when PCA has already done for feature reduction.
-    with open("PCA.pt", "rb") as file:
-        self.pca = pickle.load(file)
-    
 
 def act(self, game_state: dict) -> str:
     """
@@ -49,20 +48,23 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 1
-
+    #self.logger.info(game_state['bombs'])
+    random_prob = 0
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
-        betas = list(self.model.values())
-        feature_vector = state_to_features(game_state)
-        #feature_vector = np.dot(self.pca, feature_vector)
-        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        
-        #print(move)
-        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
+
+        q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
+        for move in self.model:
+            q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
+        move = list(q_value.keys())[np.argmax(list(q_value.values()))]
+
+        print(q_value)
+        print(move)
+
+        return move
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,0.1])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -129,3 +131,9 @@ def state_to_features(game_state: dict) -> np.array:
     # and return them as a vector
     
     return stacked_channels #stacked_channels.reshape(-1)
+
+
+
+            
+
+

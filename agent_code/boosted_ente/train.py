@@ -4,6 +4,7 @@ from collections import namedtuple, deque
 from typing import List
 import numpy as np
 
+from sklearn import exceptions
 from sklearn.datasets import make_regression
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
@@ -18,7 +19,7 @@ Transition = namedtuple('Transition',
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1}  # parameters for the GradientBoostingRegressor
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1, 'max_depth':500,'max_features': 500}  # parameters for the GradientBoostingRegressor
 GAMMA = 0.8
 
 
@@ -134,9 +135,30 @@ def experience_replay(self):
 
     for action in B:
         X = B[action]['states']
-        Y = B[action]['rewards']
+        Y = []      #B[action]['rewards']
         N = len(X)
 
+
+        if self.model is not None:
+            for i in range(N):
+
+                if B[action]['next_states'][i] is not None:     # not terminal state
+                    
+                    # computing the reward for the state according to temporal difference
+                    q_value_future = []
+                    try:
+                        for move in self.model:
+                            q_value_future.append(self.model[move].predict(np.reshape(B[action]['states'][i],(1,-1))))
+
+
+                    except exceptions.NotFittedError:
+                        self.model[action].fit(X,B[action]['rewards'])
+                    future_reward = np.max(q_value_future)
+                    Y.append(B[action]['rewards'][i] + GAMMA * future_reward)
+
+                else:
+                    Y.append(B[action]['rewards'][i])
+        #print(X,Y)
         if X != [] and Y != []:
             self.model[action].fit(X,Y)
            
