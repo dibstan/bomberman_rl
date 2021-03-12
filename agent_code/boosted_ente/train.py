@@ -13,13 +13,13 @@ from .callbacks import state_to_features
 
 # This is only an example!
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'reward'))
+                        ('state', 'action', 'reward','next_state'))
 
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-GAMMA = 0.5
-ALPHA = 0.5
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1}  # parameters for the GradientBoostingRegressor
+GAMMA = 0.8
 
 
 # Events
@@ -36,13 +36,17 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    
+    #self.fitted == False
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
+        
     except:
-        self.model = {'UP':GradientBoostingRegressor(random_state=0, warm_start=True, n_estimators=500),'RIGHT':GradientBoostingRegressor(random_state=0, warm_start=True, n_estimators=500),'DOWN':GradientBoostingRegressor(random_state=0, warm_start=True, n_estimators=500),
-        'LEFT':GradientBoostingRegressor(random_state=0, warm_start=True, n_estimators=500),'WAIT':GradientBoostingRegressor(random_state=0, warm_start=True, n_estimators=500),'BOMB':GradientBoostingRegressor(random_state=0, warm_start=True, n_estimators=500)}
+        self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
+        'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
+        for move in self.model:
+            self.model[]
+        
 
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -70,7 +74,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(WAITING_EVENT)
      
     # state_to_features is defined in callbacks.py
-    self.transitions.append(Transition(state_to_features(old_game_state), self_action, reward_from_events(self, events)))
+    self.transitions.append(Transition(state_to_features(old_game_state), self_action, reward_from_events(self, events), state_to_features(new_game_state)))
 
     
 
@@ -87,7 +91,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     :param self: The same object that is passed to all of your callbacks.
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
-    self.transitions.append(Transition(state_to_features(last_game_state), last_action, reward_from_events(self, events)))
+    self.transitions.append(Transition(state_to_features(last_game_state), last_action, reward_from_events(self, events), None))
     
     experience_replay(self)
 
@@ -120,17 +124,20 @@ def reward_from_events(self, events: List[str]) -> int:
 def experience_replay(self):
     self.logger.debug('Doing experience replay with the collected data.')
     # creating the training batches from the transition history
-    B = {'UP':{'states':[], 'rewards':[]}, 'RIGHT':{'states':[], 'rewards':[]}, 'DOWN':{'states':[], 'rewards':[]}, 
-    'LEFT':{'states':[], 'rewards':[]}, 'WAIT':{'states':[], 'rewards':[]}, 'BOMB':{'states':[], 'rewards':[]}}
+    B = {'UP':{'states':[], 'rewards':[], 'next_states':[]}, 'RIGHT':{'states':[], 'rewards':[], 'next_states':[]}, 'DOWN':{'states':[], 'rewards':[], 'next_states':[]}, 
+    'LEFT':{'states':[], 'rewards':[], 'next_states':[]}, 'WAIT':{'states':[], 'rewards':[], 'next_states':[]}, 'BOMB':{'states':[], 'rewards':[], 'next_states':[]}}
 
     for transition in self.transitions:
         if transition.action is not None:
             B[transition.action]['states'].append(transition.state)
             B[transition.action]['rewards'].append(transition.reward)
+            B[transition.action]['next_states'].append(transition.next_state)
 
     for action in B:
         X = B[action]['states']
         Y = B[action]['rewards']
+        N = len(X)
+
         if X != [] and Y != []:
             self.model[action].fit(X,Y)
            # print(self.model)
