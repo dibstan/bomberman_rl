@@ -58,7 +58,7 @@ def act(self, game_state: dict) -> str:
         return move
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.2,.0])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -86,9 +86,8 @@ def state_to_features(game_state: dict) -> np.array:
     
     #first learn field parameters(crate,wall,tile)
     tile_values = np.stack(game_state['field']).reshape(-1) #flatten field matrix
-    channels[np.where(tile_values == 1),0] = 2 #1             #crates               
-    channels[np.where(tile_values == 0),0] = 1
-    #channels[np.where(tile_values == -1),0] = -1            #walls  
+    channels[np.where(tile_values == 1),0] = 1              #crates               
+    channels[np.where(tile_values ==-1),0] = 0              #walls  
 
     #position of player
     player_coor = game_state['self'][3]
@@ -113,7 +112,7 @@ def state_to_features(game_state: dict) -> np.array:
 
     #position of coins
     for coin in game_state['coins']:
-        A = 10                                      #hyperparameter indicating weight for nearest coins
+        A = 5                                      #hyperparameter indicating weight for nearest coins
         max_distance = np.linalg.norm([15,15])     #max distance player-coin 
         coin_distance = np.linalg.norm(np.subtract(game_state['self'][3], coin))   #get the distance to the player 
         coin_coor_flat = 17 * coin[0] + coin[1]

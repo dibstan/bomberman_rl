@@ -69,21 +69,23 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if self_action == "WAIT":
         events.append(WAITING_EVENT)
 
-    new_state_vector = state_to_features(new_game_state)
-
+    
+    #define auxillary events depending on the transition
     if old_game_state is not None:
-        #define coin event
-        old_state_vector = state_to_features(old_game_state)
-        coins = np.arange(4, len(new_state_vector), 5)
-        coin_dist_old = old_state_vector[coins]
-        coin_dist_new = new_state_vector[coins]
 
-        if max(coin_dist_new) > max(coin_dist_old):
+        #get positions of the player
+        old_player_coor = old_game_state['self'][3]     
+        new_player_coor = new_game_state['self'][3]
+        
+        #define event coin_chaser
+        coin_coordinates = old_game_state['coins']
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor),axis=0)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor),axis=0)
+
+        if max(new_coin_distances) > max(old_coin_distances):   #if the distance to closest coin got smaller
             events.append(COIN_CHASER)
 
         #define events with bombs
-        old_player_coor = old_game_state['self'][3]
-        new_player_coor = new_game_state['self'][3]
         old_bomb_coors = old_game_state['bombs']
 
         dangerous_tiles = []
@@ -131,7 +133,7 @@ def reward_from_events(self, events: List[str]) -> int:
    Auxillary rewards
     """
     game_rewards = {
-        e.COIN_COLLECTED: 1000,
+        e.COIN_COLLECTED: 500,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -300,
         WAITING_EVENT: -100,
@@ -140,8 +142,8 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_LEFT: -40,
         e.MOVED_RIGHT: -40,
         e.MOVED_UP: -40,
-        COIN_CHASER: 30,
-        MOVED_AWAY_FROM_BOMB: 40,
+        COIN_CHASER: 50,
+        MOVED_AWAY_FROM_BOMB: 50,
         WAITED_IN_EXPLOSION_RANGE: -100  
     
     }
