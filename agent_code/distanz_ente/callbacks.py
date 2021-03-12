@@ -59,7 +59,7 @@ def act(self, game_state: dict) -> str:
         return move
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.2,.0])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
 
 def state_to_features(game_state: dict) -> np.array:

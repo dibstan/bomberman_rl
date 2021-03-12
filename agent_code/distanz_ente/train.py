@@ -14,8 +14,8 @@ Transition = namedtuple('Transition',
 # Hyper parameters 
 TRANSITION_HISTORY_SIZE = 100  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-GAMMA = 0.3 # discount rate
-ALPHA = 0.5 # learning rate
+GAMMA = 0.03 # discount rate
+ALPHA = 0.01 # learning rate
 
 # Events
 WAITING_EVENT = "WAIT"
@@ -133,18 +133,18 @@ def reward_from_events(self, events: List[str]) -> int:
    Auxillary rewards
     """
     game_rewards = {
-        e.COIN_COLLECTED: 500,
+        e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -300,
-        WAITING_EVENT: -100,
-        e.INVALID_ACTION: -100,
+        e.KILLED_SELF: -3,
+        WAITING_EVENT: -1,
+        e.INVALID_ACTION: -3,
         #e.MOVED_DOWN: -40,
         #e.MOVED_LEFT: -40,
         #e.MOVED_RIGHT: -40,
         #e.MOVED_UP: -40,
-        COIN_CHASER: 50,
-        MOVED_AWAY_FROM_BOMB: 50,
-        WAITED_IN_EXPLOSION_RANGE: -100  
+        #COIN_CHASER: 50,
+        #MOVED_AWAY_FROM_BOMB: 50,
+        #WAITED_IN_EXPLOSION_RANGE: -100  
     
     }
     reward_sum = 0
@@ -217,8 +217,8 @@ def experience_replay(self):
                 
                 DESC  = np.dot(np.transpose(X), np.array(Y_TD)-np.array(Y))    # gradient descent
                 
-                self.model[action] = self.model[action] + ALPHA * DESC
+                self.model[action] = self.model[action] + ALPHA * np.clip(DESC, -10,10)
                 
 
-    print(self.model)
+    #print(self.model['UP'][np.where(self.model['UP'] != 0)])
 
