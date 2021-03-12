@@ -5,6 +5,9 @@ import sklearn as sk
 from sklearn.feature_extraction import DictVectorizer
 import numpy as np
 from itertools import product
+from sklearn.datasets import make_regression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import train_test_split
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -24,7 +27,7 @@ def setup(self):
 
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-    if self.train or not os.path.isfile("my-saved-model.pt"):
+    if self.train and not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
         ##weights = np.random.rand(len(ACTIONS))
         self.model = None ## weights / weights.sum()
@@ -32,7 +35,7 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-    print(self.model)
+
 
 def act(self, game_state: dict) -> str:
     """
@@ -46,15 +49,18 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     #self.logger.info(game_state['bombs'])
-    random_prob = 0.8
-
+    random_prob = 0
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
-        betas = list(self.model.values())
-        feature_vector = state_to_features(game_state)
-        
-        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        #print(move)
+
+        q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
+        for move in self.model:
+            q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
+        move = list(q_value.keys())[np.argmax(list(q_value.values()))]
+
+        print(q_value)
+        print(move)
+
         return move
 
     self.logger.debug("Querying model for action.")
@@ -82,38 +88,42 @@ def state_to_features(game_state: dict) -> np.array:
         return None
     # For example, you could construct several channels of equal shape, ...
     b = 5                           #number of features per pixel
-    channels = np.zeros((17*17,b))  #here rows are pixels and colums certain features
+    channels = np.zeros((16*16,b))  #here rows are pixels and colums certain features
     
     #first learn field parameters(crate,wall,tile)
     tile_values = np.stack(game_state['field']).reshape(-1) #flatten field matrix
-    channels[np.where(tile_values == 1),0] = 1              #crates               
-    channels[np.where(tile_values ==-1),0] = 0              #walls  
+    channels[np.where(tile_values == 1),0] = 1 #1             #crates               
+    #channels[np.where(tile_values == 0),0] = 0
+    #channels[np.where(tile_values == -1),0] = -1            #walls  
 
     #position of player
     player_coor = game_state['self'][3]
-    player_coor_flat = 17 * player_coor[0] + player_coor[1]
+    player_coor_flat = 15 * player_coor[0] + player_coor[1]
     channels[player_coor_flat,1] = 1
 
     #postition of enemys
     for enemy in game_state['others']:      #maybe also create 'danger levels'
         enemy_coor = enemy[3]
-        enemy_coor_flat = 17 * enemy_coor[0] + enemy_coor[1]
+        enemy_coor_flat = 15 * enemy_coor[0] + enemy_coor[1]
         channels[enemy_coor_flat,2] = 1
 
     #position of bombs and their timers as 'danger' values, existing explosion maps
     for bomb in game_state['bombs']:
         bomb_coor = bomb[0]
-        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future      
+        bomb_coor_flat = 15 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future      
         channels[bomb_coor_flat,3] = 4-bomb[1]/4            #danger level = time steps passed / time needed to explode
 
-    explosion_map = game_state['explosion_map'].flatten()
-    channels[np.where(explosion_map == 2),3] = 1
-    channels[np.where(explosion_map == 1),3] = 1
+    #explosion_map = game_state['explosion_map'].flatten()
+    #channels[np.where(explosion_map == 2),3] = 1
+    #channels[np.where(explosion_map == 1),3] = 1
 
     #position of coins
     for coin in game_state['coins']:
-        coin_coor_flat = 17 * coin[0] + coin[1]
-        channels[coin_coor_flat,4] = 1
+        A = 10                                      #hyperparameter indicating weight for nearest coins
+        max_distance = np.linalg.norm([15,15])     #max distance player-coin np.dot(new_state_vector, self.temp_model[self_action]) 
+        coin_distance = np.linalg.norm(np.subtract(game_state['self'][3], coin))   #get the distance to the player 
+        coin_coor_flat = 15 * coin[0] + coin[1]
+        channels[coin_coor_flat,4] = A * coin_distance / max_distance
     
     
     # concatenate them as a feature tensor (they must have the same shape), ...
@@ -121,3 +131,9 @@ def state_to_features(game_state: dict) -> np.array:
     # and return them as a vector
     
     return stacked_channels #stacked_channels.reshape(-1)
+
+
+
+            
+
+

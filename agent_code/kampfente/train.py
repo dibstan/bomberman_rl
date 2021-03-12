@@ -107,7 +107,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     #initializing with arbitrary alpha as hyperparameter and transition_history_size as batch-size:
     if old_game_state is not None:
         alpha = 0.1
-        beta = 1
+        beta = 0.5
         old_state_vector = state_to_features(old_game_state)
         #old_state_vector = np.dot(self.pca, old_state_vector)
         
@@ -153,9 +153,9 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     
     reward = reward_from_events(self,events)
     alpha = .1
-    beta = 1
+    beta = 0.5
     #print(reward + np.dot(last_state_vector, self.temp_model[last_action]))
-    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + np.clip(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]),-500,500))
+    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + beta*q_func(self, last_state_vector)- np.dot(last_state_vector, self.temp_model[last_action]))
     self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
     # Store the model
     print(self.temp_model[last_action][np.where(self.temp_model[last_action] != 0)])

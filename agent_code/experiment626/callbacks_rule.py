@@ -204,15 +204,14 @@ def act(self, game_state):
                 self.bomb_history.append((x, y))
 
             return a
-
-
+    
 def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
 
 
     Converts the game state to the input of your model, i.e.
-    a feature vector.
+    a feature vector.print(new_state_vector[0])
 
     You can find out about the state of the game environment via game_state,
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
@@ -227,12 +226,12 @@ def state_to_features(game_state: dict) -> np.array:
         return None
     # For example, you could construct several channels of equal shape, ...
     b = 5                           #number of features per pixel
-    channels = np.zeros((17*17,b))  #here rows are flattned pixels and colums are certain features for each pixel
+    channels = np.zeros((17*17,b))  #here rows are pixels and colums certain features
     
     #first learn field parameters(crate,wall,tile)
     tile_values = np.stack(game_state['field']).reshape(-1) #flatten field matrix
     channels[np.where(tile_values == 1),0] = 1              #crates               
-    channels[np.where(tile_values == -1),0] = -1            #walls  
+    channels[np.where(tile_values ==-1),0] = 0              #walls  
 
     #position of player
     player_coor = game_state['self'][3]
@@ -248,9 +247,7 @@ def state_to_features(game_state: dict) -> np.array:
     #position of bombs and their timers as 'danger' values, existing explosion maps
     for bomb in game_state['bombs']:
         bomb_coor = bomb[0]
-
-        #also get tiles exploding in the near future
-        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future
+        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future      
         channels[bomb_coor_flat,3] = 4-bomb[1]/4            #danger level = time steps passed / time needed to explode
 
     explosion_map = game_state['explosion_map'].flatten()
@@ -259,11 +256,8 @@ def state_to_features(game_state: dict) -> np.array:
 
     #position of coins
     for coin in game_state['coins']:
-        A = 5                                      #hyperparameter indicating weight for nearest coins
-        max_distance = np.linalg.norm([15,15])     #max distance player-coin 
-        coin_distance = np.linalg.norm(np.subtract(game_state['self'][3], coin))   #get the distance to the player 
         coin_coor_flat = 17 * coin[0] + coin[1]
-        channels[coin_coor_flat,4] = A * coin_distance / max_distance
+        channels[coin_coor_flat,4] = 1
     
     
     # concatenate them as a feature tensor (they must have the same shape), ...
