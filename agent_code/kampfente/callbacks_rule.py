@@ -77,7 +77,7 @@ def setup(self):
     self.ignore_others_timer = 0
     self.current_round = 0
 
-    #saving states
+    '''#saving statess
     if self.train or not os.path.isfile("saved_states.pt"):
         self.logger.info("New State-Saver")
         ##weights = np.random.rand(len(ACTIONS))
@@ -85,7 +85,7 @@ def setup(self):
     else:
         self.logger.info("Loading saved  states.")
         with open("saved_states.pt", "rb") as file:
-            self.states = pickle.load(file)
+            self.states = pickle.load(file)'''
 
 
 def reset_self(self):
