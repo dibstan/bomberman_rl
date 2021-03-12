@@ -77,7 +77,7 @@ def setup(self):
     self.ignore_others_timer = 0
     self.current_round = 0
 
-    '''#saving statess
+    '''#saving states
     if self.train or not os.path.isfile("saved_states.pt"):
         self.logger.info("New State-Saver")
         ##weights = np.random.rand(len(ACTIONS))

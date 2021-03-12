@@ -90,7 +90,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     new_state_vector = state_to_features(new_game_state)
     
     #For feature reduction when pca has been done.
-    new_state_vector = np.dot(self.pca, new_state_vector)
+    #new_state_vector = np.dot(self.pca, new_state_vector)
     
     #saving new_game_state in self.states
     #For collecting new states for new PCA
@@ -109,7 +109,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         alpha = 0.1
         beta = 1
         old_state_vector = state_to_features(old_game_state)
-        old_state_vector = np.dot(self.pca, old_state_vector)
+        #old_state_vector = np.dot(self.pca, old_state_vector)
         
         # Auxillary reward for getting closer to closest coin
         coins = np.arange(4, len(new_state_vector), 5)
@@ -124,9 +124,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             
         except:
             reward = 0
-        #print(np.dot(old_state_vector, self.temp_model[self_action]))
+        #print(reward + np.clip(beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]), -500, 500))
         
-        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + np.clip(beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]), -50, 50))
+        gradient_vector = np.dot(np.transpose(old_state_vector) , reward + np.clip(beta*q_func(self,new_state_vector) - np.dot(old_state_vector, self.temp_model[self_action]), -50000, 50000))
         #print(np.shape(gradient_vector))
         self.temp_model[self_action] = self.temp_model[self_action] + alpha/ 2 * gradient_vector
         self.model = self.temp_model
@@ -149,16 +149,16 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
     
     last_state_vector = state_to_features(last_game_state)
-    last_state_vector = np.dot(self.pca, last_state_vector)
+    #last_state_vector = np.dot(self.pca, last_state_vector)
     
     reward = reward_from_events(self,events)
     alpha = .1
     beta = 1
-    #print(np.dot(last_state_vector, self.temp_model[last_action]))
-    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + np.clip(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]),-50,50))
+    #print(reward + np.dot(last_state_vector, self.temp_model[last_action]))
+    gradient_vector = np.dot(np.transpose(last_state_vector) , reward + np.clip(beta*q_func(self,last_state_vector) - np.dot(last_state_vector, self.temp_model[last_action]),-500,500))
     self.temp_model[last_action] = self.temp_model[last_action] + alpha/ 2 * gradient_vector
     # Store the model
-    
+    print(self.temp_model[last_action][np.where(self.temp_model[last_action] != 0)])
     self.model = self.temp_model
 
     with open("my-saved-model.pt", "wb") as file:
