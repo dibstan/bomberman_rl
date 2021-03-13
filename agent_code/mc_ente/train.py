@@ -19,7 +19,7 @@ ALPHA = 0.5 # learning rate
 
 # Events
 
-COIN_CHASER = "CLOSER_TO_COIN"
+COIN_CHASER = "COIN_CHASER"
 MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
 WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
 INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
@@ -78,7 +78,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor),axis=0)
         new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor),axis=0)
 
-        if max(new_coin_distances) > max(old_coin_distances):   #if the distance to closest coin got smaller
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
             events.append(COIN_CHASER)
 
         #define events with bombs
@@ -133,38 +133,38 @@ def reward_from_events(self, events: List[str]) -> int:
    Auxillary rewards
     """
     game_rewards = {
-        e.COIN_COLLECTED: 500,
+        e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -500,
-        e.WAITED: -100,
-        e.INVALID_ACTION: -100,
-        e.MOVED_DOWN: -40,
-        e.MOVED_LEFT: -40,
-        e.MOVED_RIGHT: -40,
-        e.MOVED_UP: -40,
-        COIN_CHASER: 50,
-        MOVED_AWAY_FROM_BOMB: 50,
-        WAITED_IN_EXPLOSION_RANGE: -200,
-        INVALID_ACTION_IN_EXPLOSION_RANGE: -200  
+        e.KILLED_SELF: -10,
+        e.WAITED: -3.5,
+        e.INVALID_ACTION: -5,
+        #e.MOVED_DOWN: 0,
+        #e.MOVED_LEFT: 0,
+        #e.MOVED_RIGHT: 0,
+        #e.MOVED_UP: 0,
+        COIN_CHASER: 3.5,
+        MOVED_AWAY_FROM_BOMB: 5,
+        WAITED_IN_EXPLOSION_RANGE: -5,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -8  
     
     }
     reward_sum = 0
     
     for event in events:
-        if event == 'WAITED_IN_EXPLOSION_RANGE': print(event)
-        if event == 'INVALID_ACTION_IN_EXPLOSION_RANGE': print(event)
+        #if event == 'COIN_CHASER': print(event)
+        #if event == 'INVALID_ACTION_IN_EXPLOSION_RANGE': print(event)
         if event in game_rewards:
             reward_sum += game_rewards[event]
-    self.logger.info(
-        f"Awarded {reward_sum} for events {', '.join(events)}")
+    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
+
 
 def experience_replay(self):
     self.logger.debug('Doing experience replay with the collected data.')
 
     # creating the training batches from the transition history
-    B = {'UP':{'states':[], 'rewards':[], 'next_states':[]}, 'RIGHT':{'states':[], 'rewards':[], 'next_states':[]}, 'DOWN':{'states':[], 'rewards':[], 'next_states':[]}, 
-    'LEFT':{'states':[], 'rewards':[], 'next_states':[]}, 'WAIT':{'states':[], 'rewards':[], 'next_states':[]}, 'BOMB':{'states':[], 'rewards':[], 'next_states':[]}}
+    B = {'UP':{'states':[], 'rewards':[]}, 'RIGHT':{'states':[], 'rewards':[]}, 'DOWN':{'states':[], 'rewards':[]}, 
+    'LEFT':{'states':[], 'rewards':[]}, 'WAIT':{'states':[], 'rewards':[]}, 'BOMB':{'states':[], 'rewards':[]}}
 
     D = 0   # feature dimension
 
@@ -172,7 +172,6 @@ def experience_replay(self):
         if transition.action is not None:
             B[transition.action]['states'].append(transition.state)
             B[transition.action]['rewards'].append(transition.reward)
-            B[transition.action]['next_states'].append(transition.next_state)
             D = len(transition.state)
 
     
@@ -186,43 +185,27 @@ def experience_replay(self):
 
     # updating the model
     for action in B:
-        X = B[action]['states']
-        Y_TD = []
-        Y = []
+        beta_update = []
 
-        N = len(X)
+        N = len(B[action]['states'])
 
-        if self.model is not None:
-            for i in range(N):
+        for i in range(N):
+            X = B[action]['states'][i]
+            total_reward = 0
+            for j in range(i,N):
+                total_reward += GAMMA**(j-i) * B[action]['rewards'][j]
 
-                if B[action]['next_states'][i] is not None:     # not terminal state
-                    
-                    # computing the reward for the state according to temporal difference
-                    q_value_future = []
+            beta_update.append(np.dot(X, total_reward - np.clip(np.dot(X,self.model[action]),-3,3)))
 
-                    for move in self.model:
-                        q_value_future.append(np.dot(self.model[move],B[action]['next_states'][i]))
 
-                    future_reward = np.max(q_value_future)
+        if beta_update != []:
+            #diff = ALPHA/N * np.sum(beta_update,axis=0)
+            self.model[action] = self.model[action] + ALPHA/N * np.sum(beta_update,axis=0)
+            
+            #print(ALPHA/N)
+            #print(f'maximum diff {action}:',max(diff),min(diff))   
 
-                    
-                    Y_TD.append(B[action]['rewards'][i] + GAMMA * future_reward)
-                    
-                    # computing the predicted reward
-                    Y.append(np.dot(self.model[move], X[i]))
-
-                else:   # terminal state
-                    
-                    Y_TD.append(B[action]['rewards'][i])
-
-                    Y.append(np.dot(self.model[action], X[i]))
-
-            if X != []:
-                
-                DESC  = np.dot(np.transpose(X), np.array(Y_TD)-np.array(Y))    # gradient descent
-                
-                self.model[action] = self.model[action] + ALPHA * DESC
-                
-
-    #print(np.where(self.model['UP']!=0)) 
+    #for action in B:
+        #print(f'maximum beta {action}:',max(self.model[action]),min(self.model[action]))
+    
 
