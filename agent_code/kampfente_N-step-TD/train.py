@@ -107,7 +107,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -3,
         WAITING_EVENT: -1,
-        e.INVALID_ACTION: -1,
+        e.INVALID_ACTION: -3,
         e.MOVED_DOWN: -.4,
         e.MOVED_LEFT: -.4,
         e.MOVED_RIGHT: -.4,
@@ -161,7 +161,7 @@ def n_step_TD(self, n):
         GRADIENT = Q_TD - Q     # gradient descent
 
         self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)      # updating the model for the relevant action
-        print(self.model)
+        #print(self.model)
 
 def Q_func(self, state):
     '''
