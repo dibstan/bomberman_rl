@@ -137,7 +137,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -3,
         WAITING_EVENT: -1,
-        e.INVALID_ACTION: -10,
+        e.INVALID_ACTION: -20,
         #e.MOVED_DOWN: -40,
         #e.MOVED_LEFT: -40,
         #e.MOVED_RIGHT: -40,
@@ -220,5 +220,5 @@ def experience_replay(self):
                 self.model[action] = self.model[action] + ALPHA * np.clip(DESC, -10,10)
                 
 
-    print(self.model['UP'][np.where(self.model['UP'] != 0)])
+    #print(self.model['UP'][np.where(self.model['UP'] != 0)])
 
