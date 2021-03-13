@@ -24,7 +24,7 @@ def setup(self):
 
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-    if self.train or not os.path.isfile("my-saved-model.pt"):
+    if self.train and not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
         ##weights = np.random.rand(len(ACTIONS))
         self.model = None ## weights / weights.sum()
@@ -32,7 +32,11 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-    print(self.model)
+
+    # This code needs to be executed when PCA has already done for feature reduction.
+    with open("PCA.pt", "rb") as file:
+        self.pca = pickle.load(file)
+    
 
 def act(self, game_state: dict) -> str:
     """
@@ -45,20 +49,20 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    #self.logger.info(game_state['bombs'])
-    random_prob = 1
+    random_prob = 0.
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = list(self.model.values())
         feature_vector = state_to_features(game_state)
-        
+        #feature_vector = np.dot(self.pca, feature_vector)
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        
         print(move)
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,0.1])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -67,7 +71,7 @@ def state_to_features(game_state: dict) -> np.array:
 
 
     Converts the game state to the input of your model, i.e.
-    a feature vector.
+    a feature vector.print(new_state_vector[0])
 
     You can find out about the state of the game environment via game_state,
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
@@ -76,45 +80,55 @@ def state_to_features(game_state: dict) -> np.array:
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
-    # This is the dict before the game begins and after it ends
-
     if game_state is None:
         return None
-    # For example, you could construct several channels of equal shape, ...
-    channels = []
-    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
-    '''channels.append(np.array([game_state['round'], game_state['step'], None, None]))    # current game state holding the current round, step and score
-    channels.append(np.array([game_state['self'][3][0], game_state['self'][3][1], int(game_state['self'][2] == True), game_state['self'][1]]))     # info about self: xpos, ypos, bomb available (0=False, 1=True), score
-    for i in range(len(game_state['others'])):
-        channels.append(np.array([game_state['others'][i][3][0], game_state['others'][i][3][1], int(game_state['others'][i][2] == True), game_state['others'][1]]))     # info about others: xpos, ypos, bomb available (0=False, 1=True), score
-    for xy in coordinates:          
-        channels.append(np.concatenate((xy, [game_state['field'][xy[0]][xy[1]], None])))   # all coordinates and the tile at that coordinate (1,-1,0)
-        channels.append(np.concatenate((xy, [game_state['explosion_map'][xy[0]][xy[1]], None])))    # all coordinates and the current explosion state of that coordinate
-    for i in range(len(game_state['bombs'])):
-        channels.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1], game_state['bombs'][i][1], None])    # info about the bombs: xpos, ypos, timer'''
-    channels.append([game_state['self'][1], int(game_state['self'][2] == True), game_state['self'][3][0], game_state['self'][3][1], game_state['round'], 0])#, game_state['step']])
-    for xy in coordinates:
-        field_state = game_state['field'][xy[0]][xy[1]]
-        explosion_state = game_state['explosion_map'][xy[0]][xy[1]]
-        bomb_countdown = -1
-        for bomb in game_state['bombs']:
-            if (xy[0],xy[1]) in bomb:
-                bomb_countdown = bomb[1]
-        coin_state = 0
-        for coin in game_state['coins']:
-            if (xy[0],xy[1]) == coin:
-                coin = 1
-        other_state = 0
-        other_bomb = 0
-        for other in game_state['others']:
-            if (xy[0],xy[1]) == other[3]:
-                other_state = 1
-                other_score = other[1]
-                other_bomb = int(other[2] == True)
-        channels.append([field_state, explosion_state, bomb_countdown, coin_state, other_state, other_bomb])
     
+    channels = [[0,0] for i in range(2*17*17)]
+    
+    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
+
+    position_self = np.array(game_state['self'][3])     # position of player self
+
+
+    # COINS
+    position_coins = np.array(game_state['coins'])      # position of the coins
+        
+    d_coins = position_coins - position_self   # distance from coins to player
+
+    for i in range(np.shape(position_coins)[0]):
+        channels[np.where((coordinates == position_coins[i]).all(axis=1))[0][0]] = d_coins[i]
+
+
+    # TILES
+    field=np.array([[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]])
+
+    rows, cols = np.where(field == -1)
+
+    position_tiles = np.array([rows, cols]).T
+    
+    d_tiles = position_tiles - position_self
+    
+    for i in range(np.shape(position_tiles)[0]):
+        channels[17*17+np.where((coordinates == position_tiles[i]).all(axis=1))[0][0]] = d_tiles[i]
+
     # concatenate them as a feature tensor (they must have the same shape), ...
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
     
-    return stacked_channels #stacked_channels.reshape(-1)
+    return stacked_channels.reshape(-1)
