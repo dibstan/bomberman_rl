@@ -103,16 +103,16 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 1000,
+        e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -300,
-        WAITING_EVENT: -100,
-        e.INVALID_ACTION: -100,
-        e.MOVED_DOWN: -40,
-        e.MOVED_LEFT: -40,
-        e.MOVED_RIGHT: -40,
-        e.MOVED_UP: -40,
-        COIN_CHASER: 30  # idea: the custom event is bad
+        e.KILLED_SELF: -3,
+        WAITING_EVENT: -1,
+        e.INVALID_ACTION: -1,
+        e.MOVED_DOWN: -.4,
+        e.MOVED_LEFT: -.4,
+        e.MOVED_RIGHT: -.4,
+        e.MOVED_UP: -.4,
+        COIN_CHASER: .3  # idea: the custom event is bad
     }
     reward_sum = 0
     for event in events:
@@ -141,7 +141,6 @@ def n_step_TD(self, n):
     
     # Updating the model
     if  np.shape(transitions_array)[0] == n:
-        print('hi')
 
         action = transitions_array[0,1]     # relevant action executed
 
@@ -161,7 +160,7 @@ def n_step_TD(self, n):
 
         GRADIENT = Q_TD - Q     # gradient descent
 
-        self.model[action] = self.model[action] + ALPHA * GRADIENT      # updating the model for the relevant action
+        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)      # updating the model for the relevant action
         print(self.model)
 
 def Q_func(self, state):
