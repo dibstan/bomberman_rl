@@ -25,6 +25,9 @@ GAMMA = 0.8
 
 # Events
 WAITING_EVENT = "WAIT"
+COIN_CHASER = "CLOSER_TO_COIN"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
@@ -45,7 +48,9 @@ def setup_training(self):
     except:
         self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
         'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
-        
+    
+    with open('explosion_map.pt', 'rb') as file:
+        self.exploding_tiles_map = pickle.load(file)
         
 
     
@@ -72,6 +77,39 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     # additional events
     if self_action == "WAIT":
         events.append(WAITING_EVENT)
+
+    # Auxillary events
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+
+    
+    #define auxillary events depending on the transition
+    if old_game_state is not None:
+
+        #get positions of the player
+        old_player_coor = old_game_state['self'][3]     
+        new_player_coor = new_game_state['self'][3]
+        
+        #define event coin_chaser
+        coin_coordinates = old_game_state['coins']
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor),axis=0)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor),axis=0)
+
+        if max(new_coin_distances) > max(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
+
+        #define events with bombs
+        old_bomb_coors = old_game_state['bombs']
+
+        dangerous_tiles = []
+        for bomb in old_bomb_coors:
+            dangerous_tiles.append(self.exploding_tiles_map[bomb[0]])
+        
+        if dangerous_tiles != []:
+            if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+                events.append(MOVED_AWAY_FROM_BOMB)
+            if old_player_coor in dangerous_tiles and self_action == "WAIT":
+                events.append(WAITED_IN_EXPLOSION_RANGE)
      
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, reward_from_events(self, events), state_to_features(new_game_state)))
@@ -100,6 +138,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
 
+
 def reward_from_events(self, events: List[str]) -> int:
     """
     *This is not a required function, but an idea to structure your code.*
@@ -108,17 +147,19 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 5000,
+        e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -500,
-        WAITING_EVENT: -200,
-        e.INVALID_ACTION: -1000
+        e.KILLED_SELF: -3,
+        WAITING_EVENT: -1,
+        e.INVALID_ACTION: -10
     }
+    #print(events)
     reward_sum = 0
     for event in events:
         if event in game_rewards:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
+    #print(reward_sum)
     return reward_sum
 
 def experience_replay(self):
@@ -132,10 +173,10 @@ def experience_replay(self):
             B[transition.action]['states'].append(transition.state)
             B[transition.action]['rewards'].append(transition.reward)
             B[transition.action]['next_states'].append(transition.next_state)
-
+    #print(B['LEFT']['rewards'])
     for action in B:
         X = B[action]['states']
-        Y = []      #B[action]['rewards']
+        Y = [] #B[action]['rewards']
         N = len(X)
 
 
@@ -149,12 +190,12 @@ def experience_replay(self):
                     try:
                         for move in self.model:
                             q_value_future.append(self.model[move].predict(np.reshape(B[action]['states'][i],(1,-1))))
-
+                        future_reward = np.max(q_value_future)
+                        Y.append(B[action]['rewards'][i] + GAMMA * future_reward)
 
                     except exceptions.NotFittedError:
                         self.model[action].fit(X,B[action]['rewards'])
-                    future_reward = np.max(q_value_future)
-                    Y.append(B[action]['rewards'][i] + GAMMA * future_reward)
+                        Y.append(B[action]['rewards'][i])
 
                 else:
                     Y.append(B[action]['rewards'][i])
