@@ -220,5 +220,5 @@ def experience_replay(self):
                 self.model[action] = self.model[action] + ALPHA * np.clip(DESC, -10,10)
                 
 
-    print(self.model['UP'][np.where(self.model['UP'] != 0)])
+    #print(self.model['UP'][np.where(self.model['UP'] != 0)])
 

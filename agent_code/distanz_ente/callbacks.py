@@ -49,13 +49,14 @@ def act(self, game_state: dict) -> str:
     #self.logger.info(game_state['bombs'])
     random_prob = 0.7
 
+
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = list(self.model.values())
         feature_vector = state_to_features(game_state)
         
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        print(move)
+        #print(move)
         return move
 
     self.logger.debug("Querying model for action.")
