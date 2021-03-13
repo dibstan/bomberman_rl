@@ -19,7 +19,10 @@ N = 4   # N step temporal difference
 
 # Events
 WAITING_EVENT = "WAIT"
-COIN_CHASER = "CLOSER_TO_COIN"
+COIN_CHASER = "COIN_CHASER"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
+INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
@@ -38,7 +41,10 @@ def setup_training(self):
     except:
         self.model = None
     self.temp_model = self.model
-    
+
+    #impot tile map
+    with open('explosion_map.pt', 'rb') as file:
+        self.exploding_tiles_map = pickle.load(file)
     #print(self.model["RIGHT"])
 
     
@@ -65,6 +71,37 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(WAITING_EVENT)
     
     if old_game_state is not None:
+
+        #get positions of the player
+        old_player_coor = old_game_state['self'][3]     
+        new_player_coor = new_game_state['self'][3]
+        
+        #define event coin_chaser
+        coin_coordinates = old_game_state['coins']
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor),axis=0)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor),axis=0)
+
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
+
+        #define events with bombs
+        old_bomb_coors = old_game_state['bombs']
+
+        dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+        for bomb in old_bomb_coors:
+            for coor in self.exploding_tiles_map[bomb[0]]:
+                dangerous_tiles.append(coor)
+
+        if dangerous_tiles != []:       
+            if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+                events.append(MOVED_AWAY_FROM_BOMB)
+            if old_player_coor in dangerous_tiles and self_action == "WAIT":
+                #print('waited')
+                events.append(WAITED_IN_EXPLOSION_RANGE)
+            if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+                #print('invalid')
+                events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
+                
         # Adding the last move to the transition cache
         self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
@@ -112,7 +149,10 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_LEFT: -.4,
         e.MOVED_RIGHT: -.4,
         e.MOVED_UP: -.4,
-        COIN_CHASER: .3  # idea: the custom event is bad
+        COIN_CHASER: 3.5,
+        MOVED_AWAY_FROM_BOMB: 3,
+        WAITED_IN_EXPLOSION_RANGE: -3,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -4 
     }
     reward_sum = 0
     for event in events:
