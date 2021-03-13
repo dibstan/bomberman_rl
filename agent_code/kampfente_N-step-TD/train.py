@@ -17,9 +17,12 @@ ALPHA = 0.05    # learning rate
 GAMMA = 0.2     # discount rate
 N = 4   # N step temporal difference
 
-# Events
+# Auxillary events
 WAITING_EVENT = "WAIT"
 COIN_CHASER = "CLOSER_TO_COIN"
+VALID_ACTION = "VALID_ACTION"
+
+
 
 def setup_training(self):
     """
@@ -37,11 +40,9 @@ def setup_training(self):
             self.model = pickle.load(file)
     except:
         self.model = None
-    self.temp_model = self.model
     
-    #print(self.model["RIGHT"])
-
     
+ 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
     Called once per step to allow intermediate rewards based on game events.
@@ -59,60 +60,54 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param new_game_state: The state the agent is in now.
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
-    
-    # Auxillary Events
-    if self_action == "WAIT":
-        events.append(WAITING_EVENT)
-    
     if old_game_state is not None:
+
+        # Adding auxillary Events
+        aux_events(self, old_game_state, self_action, new_game_state, events)
+        #print(events, reward_from_events(self,events))
+      
         # Adding the last move to the transition cache
         self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
+
         # updating the model using n-step temporal difference
         n_step_TD(self, N)
+
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
     """
     Called at the end of each game or when the agent died to hand out final rewards.
-
-    This is similar to reward_update. self.events will contain all events that
-    occurred during your agent's final step.
-
-    This is *one* of the places where you could update your agent.
-    This is also a good place to store an agent that you updated.
-
     :param self: The same object that is passed to all of your callbacks.
-    """
+    """      
+
+    # Adding the last move to the transition cache
+    self.transitions.append(Transition(state_to_features(last_game_state), last_action, state_to_features(None), reward_from_events(self, events)))
     
-    self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
-    
+
+    # updating the model using n-step temporal difference
+    n_step_TD(self, N)
+
+
+    # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
-    #self.states.append(last_state_vector)
-    #with open("saved_states.pt", "wb") as file:
-    #    pickle.dump(self.states, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
-    """
-    *This is not a required function, but an idea to structure your code.*
-
-    Here you can modify the rewards your agent get so as to en/discourage
-    certain behavior.
-    """
+    '''
+        Input: self, list of events
+        Output: sum of rewards resulting from the events
+    '''
     game_rewards = {
         e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -10,
+        e.KILLED_SELF: -20,
         WAITING_EVENT: -1,
-        e.INVALID_ACTION: -5,
-        #e.MOVED_DOWN: -.4,
-        #e.MOVED_LEFT: -.4,
-        #e.MOVED_RIGHT: -.4,
-        #e.MOVED_UP: -.4,
-        COIN_CHASER: .3  # idea: the custom event is bad
+        e.INVALID_ACTION: -7,
+        COIN_CHASER: 7,
+        VALID_ACTION: 2
     }
     reward_sum = 0
     for event in events:
@@ -120,6 +115,34 @@ def reward_from_events(self, events: List[str]) -> int:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
+
+
+
+def aux_events(self, old_game_state, self_action, new_game_state, events):
+
+    # Valid action
+    if e.INVALID_ACTION not in events:
+        events.append(VALID_ACTION)
+
+
+    # Waiting
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+    
+
+    # getting closer to coins
+    # get positions of the player
+    old_player_coor = old_game_state['self'][3]     
+    new_player_coor = new_game_state['self'][3]
+        
+    #define event coin_chaser
+    coin_coordinates = old_game_state['coins']
+    old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
+    new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+    
+    if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+        events.append(COIN_CHASER)
+
 
 
 def n_step_TD(self, n):
@@ -162,6 +185,8 @@ def n_step_TD(self, n):
 
         self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)      # updating the model for the relevant action
         #print(self.model)
+
+
 
 def Q_func(self, state):
     '''
