@@ -42,11 +42,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-<<<<<<< HEAD
     random_prob = 0.8
-=======
-    random_prob = 1
->>>>>>> 15136f1c2309b607cf363658c8031b85f014b034
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
