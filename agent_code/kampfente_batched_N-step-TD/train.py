@@ -12,8 +12,9 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 # Hyperparameters
+HIST_SIZE = 100
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.05    # learning rate
+ALPHA = 0.001    # learning rate
 GAMMA = 0.2     # discount rate
 N = 4   # N step temporal difference
 
@@ -33,7 +34,7 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
 
-    self.transitions = deque(maxlen=N)
+    self.transitions = deque(maxlen=HIST_SIZE)
 
     try:
         with open("my-saved-model.pt", "rb") as file:
@@ -45,15 +46,6 @@ def setup_training(self):
  
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
-    Called once per step to allow intermediate rewards based on game events.
-
-    When this method is called, self.events will contain a list of all game
-    events relevant to your agent that occurred during the previous step. Consult
-    settings.py to see what events are tracked. You can hand out rewards to your
-    agent based on these events and your knowledge of the (new) game state.
-
-    This is *one* of the places where you could update your agent.
-
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     :param old_game_state: The state that was passed to the last call of `act`.
     :param self_action: The action that you took.
@@ -68,10 +60,6 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
       
         # Adding the last move to the transition cache
         self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
-    
-
-        # updating the model using n-step temporal difference
-        n_step_TD(self, N)
 
 
 
@@ -85,7 +73,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, state_to_features(None), reward_from_events(self, events)))
     
 
-    # updating the model using n-step temporal difference
+    # updating the model using batched gradient descent n-step temporal difference 
     n_step_TD(self, N)
 
 
@@ -104,7 +92,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -20,
-        WAITING_EVENT: -1,
+        WAITING_EVENT: -7,
         e.INVALID_ACTION: -7,
         COIN_CHASER: 7,
         VALID_ACTION: 2
@@ -161,8 +149,30 @@ def n_step_TD(self, n):
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
     transitions_array = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+
+    # Creating the batches
+    B = {'UP':{}, 'RIGHT':{}, 'DOWN':{},'LEFT':{}, 'WAIT':{}, 'BOMB':{}}
+    actions = list(B.keys())
     
-    # Updating the model
+    for action in actions:
+        features = transitions_array[:,0][np.where(transitions_array[:,1] == action)]
+        try:    # features of old state
+            B[action]['features'] = np.stack(features)
+        except ValueError: 
+            B[action]['features'] = np.array([])
+
+        try:    # reward of action in transition
+            B[action]['rewards'] = np.stack(transitions_array[:,3][np.where(transitions_array[:,1] == action)])
+        except ValueError:
+            B[action]['rewards'] = np.array([])
+
+        
+        
+
+    print(B)
+
+
+    '''# Updating the model
     if  np.shape(transitions_array)[0] == n:
 
         action = transitions_array[0,1]     # relevant action executed
@@ -181,10 +191,10 @@ def n_step_TD(self, n):
         
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
 
-        GRADIENT = Q_TD - Q     # gradient descent
-
-        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)      # updating the model for the relevant action
-        #print(self.model)
+        GRADIENT = first_state * (Q_TD - Q)     # gradient descent
+        
+        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+        #print(self.model)'''
 
 
 

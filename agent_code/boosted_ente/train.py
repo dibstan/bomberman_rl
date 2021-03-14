@@ -12,11 +12,11 @@ from sklearn.model_selection import train_test_split
 import events as e
 from .callbacks import state_to_features
 
-# This is only an example!
+# History cache
 Transition = namedtuple('Transition',
                         ('state', 'action', 'reward','next_state'))
 
-# Hyper parameters -- DO modify
+# Hyper parameters
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
 PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1, 'max_depth':500,'max_features': 500}  # parameters for the GradientBoostingRegressor
@@ -31,14 +31,9 @@ WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
-    Initialise self for training purpose.
-
-    This is called after `setup` in callbacks.py.
-
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-    # Example: Setup an array that will note transition tuples
-    # (s, a, r, s')
+    # transition cache
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
     
     try:
@@ -56,15 +51,6 @@ def setup_training(self):
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
-    Called once per step to allow intermediate rewards based on game events.
-
-    When this method is called, self.events will contain a list of all game
-    events relevant to your agent that occurred during the previous step. Consult
-    settings.py to see what events are tracked. You can hand out rewards to your
-    agent based on these events and your knowledge of the (new) game state.
-
-    This is *one* of the places where you could update your agent.
-
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     :param old_game_state: The state that was passed to the last call of `act`.
     :param self_action: The action that you took.
