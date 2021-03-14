@@ -27,7 +27,7 @@ def setup(self):
 
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-    if self.train or not os.path.isfile("my-saved-model.pt"):
+    if self.train and not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
         ##weights = np.random.rand(len(ACTIONS))
         self.model = None ## weights / weights.sum()
@@ -35,7 +35,7 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-
+    
 
 def act(self, game_state: dict) -> str:
     """
@@ -49,7 +49,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     #self.logger.info(game_state['bombs'])
-    random_prob = 0
+    random_prob = 1
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -58,7 +58,7 @@ def act(self, game_state: dict) -> str:
         for move in self.model:
             q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
         move = list(q_value.keys())[np.argmax(list(q_value.values()))]
-
+        print(q_value)
         #print(q_value)
         #print(move)
 
@@ -69,9 +69,123 @@ def act(self, game_state: dict) -> str:
 
 
 
-
-
 def state_to_features(game_state: dict) -> np.array:
+    """
+    *This is not a required function, but an idea to structure your code.*
+
+
+    Converts the game state to the input of your model, i.e.
+    a feature vector.print(new_state_vector[0])
+
+    You can find out about the state of the game environment via game_state,
+    which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
+    what it contains.
+
+    :param game_state:  A dictionary describing the current game board.
+    :return: np.array
+    """
+
+    if game_state is None:
+        return None
+    
+    #get player position:
+    player = np.array(game_state['self'][3])
+
+    #converting positions of coins and bombs
+    position_coins = np.array(game_state['coins'])
+    bomb_position = np.array(game_state['bombs'], dtype = object)
+
+    #positions of neigboring tiles in the order (Left, Right, Up, Down)
+    neighbor_pos = []
+    neighbor_pos.append((player[0], player[1] - 1))
+    neighbor_pos.append((player[0], player [1] + 1))
+    neighbor_pos.append((player[0] - 1, player[1]))
+    neighbor_pos.append((player[0] + 1, player[1]))
+    neighbor_pos = np.array(neighbor_pos)
+    
+    # distance from coins to player
+    if position_coins != []:
+        d_coins = np.subtract(position_coins, player)   
+        
+        dist_norm = np.linalg.norm(d_coins, axis = 1)
+        #print(dist_norm)
+        closest_coin = position_coins[dist_norm.argmin()]
+        #print(dist_norm.argmin())
+        
+        #find direction to go for closest coin:
+        d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
+
+        #finding the direction that brings us closer the closest coin
+        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 0).argmin()
+
+    #creating channels for one-hot encoding
+    channels = np.zeros((4,5))
+    
+    #describing field of agent:
+    player_tile = np.zeros(2) #... adjust to 3 when Danger feature is added
+
+    #each direction is encoded by [wall, crate, coin, bomb, priority] ...danger value to come
+
+    for i in range(np.shape(neighbor_pos)[0]):
+        
+        #finding a wall:
+        field_value = game_state['field'][neighbor_pos[i][0]][neighbor_pos[i][1]] 
+
+        if field_value == -1:
+            channels[i][0] = 1
+        
+        #finding crate
+        if field_value == 1:
+            channels[i][1] = 1
+
+        #finding coin:
+        if position_coins != []:
+            if neighbor_pos[i] in position_coins:
+                channels[i][2] = 1
+
+            #describing priority:
+            if i == closest_neighbor:
+                channels[i][4] = 1
+
+        #finding bomb:
+        if bomb_position != []:
+            
+            #bomb on neighbor?
+            if neighbor_pos[i] in bomb_position[:,0]:
+                channels[i][3] = 1
+
+            #bomb on player position?
+            if player in bomb_position[:,0]:
+                player_tile[1] = 1
+        
+        
+    #combining current channels:
+    stacked_channels = np.stack(channels).reshape(-1)
+
+    #player on coin?
+    if player in position_coins:
+        player_tile[0] = 1
+
+    #combining neighbor describtion with current tile describtion:
+    stacked_channels = np.concatenate((stacked_channels, player_tile))
+
+    
+    #does our player have a bomb?
+    player_bomb = []
+    if game_state['self'][2]:
+        player_bomb.append(1)
+    else:
+        player_bomb.append(0)
+
+    #combining and returning state_vector:
+    stacked_channels = np.concatenate((stacked_channels, player_bomb))
+    
+
+    
+    return stacked_channels
+
+
+'''def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
 
@@ -137,7 +251,7 @@ def state_to_features(game_state: dict) -> np.array:
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
     
-    return stacked_channels.reshape(-1)
+    return stacked_channels.reshape(-1)'''
 '''def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*

@@ -54,7 +54,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if old_game_state is not None:
 
         # Adding auxillary Events
-        aux_events(self, old_game_state, self_action, new_game_state, events)
+        #aux_events(self, old_game_state, self_action, new_game_state, events)
         #print(events, reward_from_events(self,events))
       
         # Adding the last move to the transition cache
@@ -98,7 +98,7 @@ def reward_from_events(self, events: List[str]) -> int:
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
         COIN_CHASER: 0,
-        VALID_ACTION: -1
+        VALID_ACTION: 0
     }
     reward_sum = 0
     for event in events:
@@ -109,7 +109,7 @@ def reward_from_events(self, events: List[str]) -> int:
 
 
 
-def aux_events(self, old_game_state, self_action, new_game_state, events):
+'''def aux_events(self, old_game_state, self_action, new_game_state, events):
 
     # Valid action
     if e.INVALID_ACTION not in events:
@@ -132,7 +132,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
     
     if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-        events.append(COIN_CHASER)
+        events.append(COIN_CHASER)'''
 
 
 
@@ -168,13 +168,37 @@ def n_step_TD(self, n):
             for i in range(1,n):
                 discount[i-1] = discount[i-1]**i
 
+            #update with original state
             Q_TD = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, last_state)   # value estimate using n-step temporal difference
             Q = np.dot(first_state, self.model[action])     # value estimate of current model
 
             GRADIENT = first_state * (Q_TD - Q)     # gradient descent
             
             self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
-            #print(self.model)
+
+
+            #update with horizontally shifted state:
+            hshift_first_state, hshift_action = horizontal_shift(first_state, action)
+            hshift_last_state, hshift_action = horizontal_shift(last_state, action)
+
+            Q_TD_hshift = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, hshift_last_state)   # value estimate using n-step temporal difference
+            Q_hshift = np.dot(hshift_first_state, self.model[hshift_action])     # value estimate of current model
+
+            GRADIENT = first_state * (Q_TD_hshift - Q_hshift)     # gradient descent
+            
+            self.model[hshift_action] = self.model[hshift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+
+            #update with vertically shifted state:
+            vshift_first_state, vshift_action = vertical_shift(first_state, action)
+            vshift_last_state, vshift_action = vertical_shift(last_state, action)
+
+            Q_TD_vshift = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, vshift_last_state)   # value estimate using n-step temporal difference
+            Q_vshift = np.dot(vshift_first_state, self.model[vshift_action])     # value estimate of current model
+
+            GRADIENT = first_state * (Q_TD_vshift - Q_vshift)     # gradient descent
+            
+            self.model[vshift_action] = self.model[vshift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+
 
 
 
@@ -187,3 +211,109 @@ def Q_func(self, state):
     vec_model = np.array(list(self.model.values()))     # vectorizing the model dict
     
     return np.max(np.dot(vec_model, state))      # return the max Q value
+
+
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[10:15] = state[15:20]
+    shifted_state[15:20] = state[10:15]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def horizontal_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[0:5] = state[5:10]
+    shifted_state[5:10] = state[0:5]
+
+    #shifting actions
+    if action == "LEFT":
+        new_action = "RIGHT"
+    
+    elif action == "RIGHT":
+        new_action = "LEFT"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_left(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+
+    #up -> left 
+    turned_state[0:5] = state[10:15]
+    #down -> right
+    turned_state[5:10] = state[15:20]
+    #right -> up
+    turned_state[10:15] = state[5:10]
+    #left -> down
+    turned_state[15:20] = state[0:5]
+
+    #shifting actions
+    if action == "LEFT":
+        new_action = "DOWN"
+    
+    elif action == "RIGHT":
+        new_action = "UP"
+
+    elif action == "DOWN":
+        new_action = "RIGHT"
+    
+    elif action == "UP":
+        new_action = "LEFT"
+
+    return turned_state, new_action
+
+def turn_right(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+
+    #up -> left 
+    turned_state[0:5] = state[15:20]
+    #down -> right
+    turned_state[5:10] = state[10:15]
+    #right -> up
+    turned_state[10:15] = state[0:5]
+    #left -> down
+    turned_state[15:20] = state[5:10]
+
+    #shifting actions
+    if action == "LEFT":
+        new_action = "UP"
+    
+    elif action == "RIGHT":
+        new_action = "DOWN"
+
+    elif action == "DOWN":
+        new_action = "LEFT"
+    
+    elif action == "UP":
+        new_action = "RIGHT"
+
+    return turned_state, new_action
+
+def turn_around(state, action):
+    #first turn:
+    turn1, action1 = turn_left(state, action)
+
+    #second turn:
+    turn2, action2 = turn_left(turn1, action1)
+
+    return turn2, action2

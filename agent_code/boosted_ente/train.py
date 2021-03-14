@@ -19,7 +19,7 @@ Transition = namedtuple('Transition',
 # Hyper parameters
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1, 'max_depth':500,'max_features': 500}  # parameters for the GradientBoostingRegressor
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1, 'max_depth':500}  # parameters for the GradientBoostingRegressor
 GAMMA = 0.8
 
 
@@ -162,7 +162,7 @@ def experience_replay(self):
     #print(B['LEFT']['rewards'])
     for action in B:
         X = B[action]['states']
-        Y = [] #B[action]['rewards']
+        Y = []  #B[action]['rewards']
         N = len(X)
 
 
@@ -185,7 +185,7 @@ def experience_replay(self):
 
                 else:
                     Y.append(B[action]['rewards'][i])
-        #print(X,Y)
+        #print(np.shape(X),np.shape(Y))
         if X != [] and Y != []:
             self.model[action].fit(X,Y)
            

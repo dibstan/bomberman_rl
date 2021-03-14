@@ -287,30 +287,26 @@ def state_to_features(game_state: dict) -> np.array:
         if field_value == 1:
             channels[i][1] = 1
 
-    #finding coin:
-    if position_coins != []:
-        #if neighbor_pos[i] in position_coins:
-        index = np.where((neighbor_pos == position_coins).all(axis = 1))[0]
-        if index.size > 0
-            channels[index][2] = 1
+        #finding coin:
+        if position_coins != []:
+            if neighbor_pos[i] in position_coins:
+                channels[i][2] = 1
 
-    #finding bomb:
-    if bomb_position != []:
+        #finding bomb:
+        if bomb_position != []:
             
-        #bomb on neighbor?
-        index = np.where((neighbor_pos == bomb_position[:,0]).all(axis = 1))[0]
-        if index.size > 0:
-            channels[index][3] = 1
+            #bomb on neighbor?
+            if neighbor_pos[i] in bomb_position[:,0]:
+                channels[i][3] = 1
 
-        #bomb on player position?
-        if player in bomb_position[:,0]:
-            player_tile[1] = 1
+            #bomb on player position?
+            if player in bomb_position[:,0]:
+                player_tile[1] = 1
         
-
-
     #describing priority:
-    channels[closest_neighbor][4] = 1    
-    
+    if position_coins != []:
+        channels[closest_neighbor][4] = 1  
+
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
 
@@ -335,3 +331,5 @@ def state_to_features(game_state: dict) -> np.array:
 
     
     return stacked_channels
+
+    
