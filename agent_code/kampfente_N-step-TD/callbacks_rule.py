@@ -1,8 +1,13 @@
 from collections import deque
 from random import shuffle
-from itertools import product
-import numpy as np
 
+import os
+import pickle
+import random
+import sklearn as sk
+from sklearn.feature_extraction import DictVectorizer
+import numpy as np
+from itertools import product
 
 def look_for_targets(free_space, start, targets, logger=None):
     """Find direction of closest target that can be reached via free tiles.
@@ -71,6 +76,16 @@ def setup(self):
     # While this timer is positive, agent will not hunt/attack opponents
     self.ignore_others_timer = 0
     self.current_round = 0
+
+    '''#saving states
+    if self.train or not os.path.isfile("saved_states.pt"):
+        self.logger.info("New State-Saver")
+        ##weights = np.random.rand(len(ACTIONS))
+        self.states = [] ## weights / weights.sum()
+    else:
+        self.logger.info("Loading saved  states.")
+        with open("saved_states.pt", "rb") as file:
+            self.states = pickle.load(file)'''
 
 
 def reset_self(self):
@@ -204,7 +219,6 @@ def act(self, game_state):
                 self.bomb_history.append((x, y))
 
             return a
-
 def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
@@ -220,58 +234,52 @@ def state_to_features(game_state: dict) -> np.array:
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
+    # This is the dict before the game begins and after it ends
+
     if game_state is None:
         return None
+    # For example, you could construct several channels of equal shape, ...
+    b = 5                           #number of features per pixel
+    channels = np.zeros((17*17,b))  #here rows are pixels and colums certain features
     
-    channels = [[0,0] for i in range(2*17*17)]
+    #first learn field parameters(crate,wall,tile)
+    tile_values = np.stack(game_state['field']).reshape(-1) #flatten field matrix
+    channels[np.where(tile_values == 1),0] = 2  #1              #crates               
+    channels[np.where(tile_values == 0),0] = 1
+    #channels[np.where(tile_values == -1),0] = -1            #walls  
+
+    #position of player
+    player_coor = game_state['self'][3]
+    player_coor_flat = 17 * player_coor[0] + player_coor[1]
+    channels[player_coor_flat,1] = 1
+
+    #postition of enemys
+    for enemy in game_state['others']:      #maybe also create 'danger levels'
+        enemy_coor = enemy[3]
+        enemy_coor_flat = 17 * enemy_coor[0] + enemy_coor[1]
+        channels[enemy_coor_flat,2] = 1
+
+    #position of bombs and their timers as 'danger' values, existing explosion maps
+    for bomb in game_state['bombs']:
+        bomb_coor = bomb[0]
+        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future      
+        channels[bomb_coor_flat,3] = 4-bomb[1]/4            #danger level = time steps passed / time needed to explode
+
+    explosion_map = game_state['explosion_map'].flatten()
+    channels[np.where(explosion_map == 2),3] = 1
+    channels[np.where(explosion_map == 1),3] = 1
+
+    #position of coins
+    for coin in game_state['coins']:
+        A = 5                                      #hyperparameter indicating weight for nearest coins
+        max_distance = np.linalg.norm([15,15])     #max distance player-coin 
+        coin_distance = np.linalg.norm(np.subtract(game_state['self'][3], coin))   #get the distance to the player 
+        coin_coor_flat = 17 * coin[0] + coin[1]
+        channels[coin_coor_flat,4] = A * coin_distance / max_distance
     
-    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
-
-    position_self = np.array(game_state['self'][3])     # position of player self
-
-
-    # COINS
-    position_coins = np.array(game_state['coins'])      # position of the coins
-        
-    d_coins = position_coins - position_self   # distance from coins to player
-
-    for i in range(np.shape(position_coins)[0]):
-        channels[np.where((coordinates == position_coins[i]).all(axis=1))[0][0]] = d_coins[i]
-
-
-    '''# TILES
-    field=np.array([[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
-                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
-                    [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]])
-
-    rows, cols = np.where(field == -1)
-
-    position_tiles = np.array([rows, cols]).T
-    
-    d_tiles = position_tiles - position_self
-    
-    for i in range(np.shape(position_tiles)[0]):
-        channels[17*17+np.where((coordinates == position_tiles[i]).all(axis=1))[0][0]] = d_tiles[i]'''
-    
-    # SELF
-    channels.append(position_self)
     
     # concatenate them as a feature tensor (they must have the same shape), ...
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
     
-    return stacked_channels.reshape(-1)
+    return stacked_channels #stacked_channels.reshape(-1)
