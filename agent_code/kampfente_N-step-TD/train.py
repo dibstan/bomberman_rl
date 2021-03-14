@@ -13,7 +13,7 @@ Transition = namedtuple('Transition',
 
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.05    # learning rate
+ALPHA = 0.001    # learning rate
 GAMMA = 0.2     # discount rate
 N = 4   # N step temporal difference
 
@@ -181,10 +181,10 @@ def n_step_TD(self, n):
         
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
 
-        GRADIENT = Q_TD - Q     # gradient descent
-
-        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)      # updating the model for the relevant action
-        #print(self.model)
+        GRADIENT = first_state * (Q_TD - Q)     # gradient descent
+        
+        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+        print(self.model)
 
 
 

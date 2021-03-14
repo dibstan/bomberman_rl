@@ -46,7 +46,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 0.8
+    random_prob = 0.0
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -79,7 +79,7 @@ def state_to_features(game_state: dict) -> np.array:
     if game_state is None:
         return None
     
-    channels = [[0,0] for i in range(2*17*17)]
+    channels = []
     
     coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
 
@@ -91,11 +91,18 @@ def state_to_features(game_state: dict) -> np.array:
         
     d_coins = position_coins - position_self   # distance from coins to player
 
+    for i in range(9):
+        if i < len(d_coins):
+            channels.append(d_coins[i])
+        else:
+            channels.append([0,0])
+
+    '''
     for i in range(np.shape(position_coins)[0]):
         channels[np.where((coordinates == position_coins[i]).all(axis=1))[0][0]] = d_coins[i]
 
 
-    '''# TILES
+    # TILES
     field=np.array([[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                     [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
                     [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
