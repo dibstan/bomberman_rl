@@ -95,7 +95,7 @@ def reward_from_events(self, events: List[str]) -> int:
         WAITING_EVENT: -7,
         e.INVALID_ACTION: -7,
         COIN_CHASER: 7,
-        VALID_ACTION: 2
+        VALID_ACTION: -1
     }
     reward_sum = 0
     for event in events:
@@ -149,24 +149,45 @@ def n_step_TD(self, n):
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
     transitions_array = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+    total_batch_size = np.shape(transitions_array)[0]
 
     # Creating the batches
     B = {'UP':{}, 'RIGHT':{}, 'DOWN':{},'LEFT':{}, 'WAIT':{}, 'BOMB':{}}
     actions = list(B.keys())
+
     
     for action in actions:
+        # Adding the states to the sub-batches
         features = transitions_array[:,0][np.where(transitions_array[:,1] == action)]
+
         try:    # features of old state
             B[action]['features'] = np.stack(features)
+
         except ValueError: 
             B[action]['features'] = np.array([])
 
+
+        # Adding the n-next rewards to the subbatches
+        n_next_instances = np.where(transitions_array[:,1] == action)[0][:, None] + np.arange(n)    # matrix holding the indices for the n next transitions for each transition in the action sub-batch
+        n_next_instances_corrected = np.where(n_next_instances > total_batch_size-1, 0, n_next_instances)    # setting indices out of the total batch size to 0
+        
         try:    # reward of action in transition
-            B[action]['rewards'] = np.stack(transitions_array[:,3][np.where(transitions_array[:,1] == action)])
+            rewards = np.stack(transitions_array[:,3][n_next_instances_corrected])
+            B[action]['rewards'] = np.stack(np.where(n_next_instances > total_batch_size-1, 0, rewards))
+
         except ValueError:
             B[action]['rewards'] = np.array([])
 
-        
+
+        # Adding the n-th new state to the sub batches
+        nth_next_instance = np.where(transitions_array[:,1] == action)[0] + n
+        nth_next_instance_corrected = np.where(nth_next_instance > total_batch_size -1, 0, nth_next_instance)
+
+        nth_new_features = transitions_array[:,0][nth_next_instance_corrected]
+        B['nth_state'] = nth_new_features
+
+
+
         
 
     print(B)
