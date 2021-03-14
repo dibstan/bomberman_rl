@@ -45,15 +45,6 @@ def setup_training(self):
  
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
-    Called once per step to allow intermediate rewards based on game events.
-
-    When this method is called, self.events will contain a list of all game
-    events relevant to your agent that occurred during the previous step. Consult
-    settings.py to see what events are tracked. You can hand out rewards to your
-    agent based on these events and your knowledge of the (new) game state.
-
-    This is *one* of the places where you could update your agent.
-
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     :param old_game_state: The state that was passed to the last call of `act`.
     :param self_action: The action that you took.
@@ -70,7 +61,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
 
-        # updating the model using n-step temporal difference
+        # updating the model using stochastic gradient descent n-step temporal difference 
         n_step_TD(self, N)
 
 
@@ -85,7 +76,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, state_to_features(None), reward_from_events(self, events)))
     
 
-    # updating the model using n-step temporal difference
+    # updating the model using stochastic gradient descent n-step temporal difference 
     n_step_TD(self, N)
 
 
@@ -104,7 +95,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.COIN_COLLECTED: 10,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -20,
-        WAITING_EVENT: -7,
+        WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
         COIN_CHASER: 7,
         VALID_ACTION: 2
@@ -164,7 +155,7 @@ def n_step_TD(self, n):
     
     # Updating the model
     if  np.shape(transitions_array)[0] == n:
-
+        
         action = transitions_array[0,1]     # relevant action executed
 
         first_state = transitions_array[0,0]    # first state saved in the cache
