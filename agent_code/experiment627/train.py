@@ -19,8 +19,11 @@ N = 4   # N step temporal difference
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
-COIN_CHASER = "CLOSER_TO_COIN"
 VALID_ACTION = "VALID_ACTION"
+COIN_CHASER = "COIN_CHASER"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
+INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 
 
@@ -40,6 +43,8 @@ def setup_training(self):
             self.model = pickle.load(file)
     except:
         self.model = None
+    with open('explosion_map.pt', 'rb') as file:
+        self.exploding_tiles_map = pickle.load(file)
     
     
  
@@ -97,8 +102,11 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_SELF: -20,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
-        COIN_CHASER: 0,
-        VALID_ACTION: -1
+        COIN_CHASER: 0.5,
+        VALID_ACTION: -1,
+        MOVED_AWAY_FROM_BOMB: 1,
+        WAITED_IN_EXPLOSION_RANGE: -1,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
     }
     reward_sum = 0
     for event in events:
@@ -127,13 +135,35 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     new_player_coor = new_game_state['self'][3]
         
     #define event coin_chaser
-    coin_coordinates = old_game_state['coins']
-    old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
-    new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
-    
-    if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-        events.append(COIN_CHASER)
 
+    coin_coordinates = old_game_state['coins']
+    if len(coin_coordinates) != 0:
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+
+    
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
+
+    ############################################################################################################
+     #define events with bombs
+    old_bomb_coors = old_game_state['bombs']
+
+    dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:
+            dangerous_tiles.append(coor)
+
+    if dangerous_tiles != []:       
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_AWAY_FROM_BOMB)
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
+            #print('waited')
+            events.append(WAITED_IN_EXPLOSION_RANGE)
+        if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+            #print('invalid')
+            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
+    ######################################################################################################
 
 
 def n_step_TD(self, n):

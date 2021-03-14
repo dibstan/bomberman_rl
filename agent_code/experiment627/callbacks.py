@@ -48,7 +48,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.25
+    else: random_prob = 1
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -174,12 +174,12 @@ def state_to_features(game_state: dict) -> np.array:
             #bomb on player position?
             if player in bomb_position:
                 player_tile[1] = 1
-
             
-            #accurate, but more complicated approach:
             # are there dangerous tiles in the neighbors?
             bomb_tuples = [tuple(x) for x in bomb_position]
-            for j in close_bomb_indices:                                                     #only look at close bombs               
+           
+            for j in close_bomb_indices:                                                     #only look at close bombs
+                if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
                 dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])  #get all tiles exploding with close bombs
                 if neighbor_pos in dangerous_tiles:                                     #if neighbor is on dangerous tile -> set danger value
                     channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
@@ -187,7 +187,7 @@ def state_to_features(game_state: dict) -> np.array:
 
             #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
 
-            if len(np.where(explosion_map != 0)[0]) != 0:                                     #check if there are current explosions
+            if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
                 if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
                     channels[i,5] = 1 
 
