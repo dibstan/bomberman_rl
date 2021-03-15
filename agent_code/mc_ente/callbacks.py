@@ -77,6 +77,7 @@ def state_to_features(game_state: dict) -> np.array:
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
+<<<<<<< Updated upstream
     if game_state is None:
         return None
     
@@ -124,8 +125,54 @@ def state_to_features(game_state: dict) -> np.array:
     for i in range(np.shape(position_tiles)[0]):
         channels[17*17+np.where((coordinates == position_tiles[i]).all(axis=1))[0][0]] = d_tiles[i]
 
+=======
+    # This is the dict before the game begins and after it ends
+
+    if game_state is None:
+        return None
+    # For example, you could construct several channels of equal shape, ...
+    b = 5                           #number of features per pixel
+    channels = np.zeros((17*17,b))  #here rows are pixels and colums certain features
+    
+    #first learn field parameters(crate,wall,tile)
+    tile_values = np.stack(game_state['field']).reshape(-1) #flatten field matrix
+    channels[np.where(tile_values == 1),0] = 1              #crates               
+    channels[np.where(tile_values ==-1),0] =-1              #walls  
+
+    #position of player
+    player_coor = game_state['self'][3]
+    player_coor_flat = 17 * player_coor[0] + player_coor[1]
+    channels[player_coor_flat,1] = 1
+
+    #postition of enemys
+    for enemy in game_state['others']:      #maybe also create 'danger levels'
+        enemy_coor = enemy[3]
+        enemy_coor_flat = 17 * enemy_coor[0] + enemy_coor[1]
+        channels[enemy_coor_flat,2] = 1
+
+    #position of bombs and their timers as 'danger' values, existing explosion maps
+    for bomb in game_state['bombs']:
+        bomb_coor = bomb[0]
+        bomb_coor_flat = 17 * bomb_coor[0] + bomb_coor[1]   #here maybe include all tiles exploding in the near future      
+        channels[bomb_coor_flat,3] = 4-bomb[1]/4            #danger level = time steps passed / time needed to explode
+
+    explosion_map = game_state['explosion_map'].flatten()
+    channels[np.where(explosion_map == 2),3] = 1
+    channels[np.where(explosion_map == 1),3] = 1
+
+    #position of coins
+    for coin in game_state['coins']:
+        coin_coor_flat = 17 * coin[0] + coin[1]
+        channels[coin_coor_flat,4] = 1
+    
+    
+>>>>>>> Stashed changes
     # concatenate them as a feature tensor (they must have the same shape), ...
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
     
+<<<<<<< Updated upstream
     return stacked_channels.reshape(-1)
+=======
+    return stacked_channels #stacked_channels.reshape(-1)
+>>>>>>> Stashed changes
