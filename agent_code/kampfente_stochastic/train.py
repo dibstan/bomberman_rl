@@ -14,7 +14,7 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.0001    # learning rate
-GAMMA = 0.2     # discount rate
+GAMMA = 0.5     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
@@ -96,6 +96,9 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.fluctuations = []      # resetting the fluctuation array
     with open('fluctuations.pt', 'wb') as file:
         pickle.dump(self.max_fluctuations, file)
+
+    # delete history cache
+    self.transitions = deque(maxlen=N)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -189,11 +192,11 @@ def n_step_TD(self, n):
    
         else:
             Q_TD = np.dot(discount, n_future_rewards)
-            
-        #print(action)
-        #print(n_future_rewards)
-        #print(Q_TD)
         
+        print(action)
+        print(n_future_rewards)
+        print(Q_TD)
+
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
         self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
