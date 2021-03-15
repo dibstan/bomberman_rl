@@ -50,7 +50,7 @@ def act(self, game_state: dict) -> str:
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
-        print(move)
+        #print(move)
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.debug("Querying model for action.")
