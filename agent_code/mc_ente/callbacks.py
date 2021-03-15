@@ -77,6 +77,55 @@ def state_to_features(game_state: dict) -> np.array:
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
+<<<<<<< Updated upstream
+    if game_state is None:
+        return None
+    
+    channels = [[0,0] for i in range(2*17*17)]
+    
+    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
+
+    position_self = np.array(game_state['self'][3])     # position of player self
+
+
+    # COINS
+    position_coins = np.array(game_state['coins'])      # position of the coins
+        
+    d_coins = position_coins - position_self   # distance from coins to player
+
+    for i in range(np.shape(position_coins)[0]):
+        channels[np.where((coordinates == position_coins[i]).all(axis=1))[0][0]] = d_coins[i]
+
+
+    # TILES
+    field=np.array([[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1,  0, -1],
+                    [-1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1],
+                    [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]])
+
+    rows, cols = np.where(field == -1)
+
+    position_tiles = np.array([rows, cols]).T
+    
+    d_tiles = position_tiles - position_self
+    
+    for i in range(np.shape(position_tiles)[0]):
+        channels[17*17+np.where((coordinates == position_tiles[i]).all(axis=1))[0][0]] = d_tiles[i]
+
+=======
     # This is the dict before the game begins and after it ends
 
     if game_state is None:
@@ -117,8 +166,13 @@ def state_to_features(game_state: dict) -> np.array:
         channels[coin_coor_flat,4] = 1
     
     
+>>>>>>> Stashed changes
     # concatenate them as a feature tensor (they must have the same shape), ...
     stacked_channels = np.stack(channels).reshape(-1)
     # and return them as a vector
     
+<<<<<<< Updated upstream
+    return stacked_channels.reshape(-1)
+=======
     return stacked_channels #stacked_channels.reshape(-1)
+>>>>>>> Stashed changes
