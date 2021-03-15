@@ -47,7 +47,9 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    if self.model == None: random_prob = 0
+    if self.model == None: 
+        random_prob = 0
+        
     else: random_prob = 1
 
     if self.train and random.random() < random_prob:
@@ -60,7 +62,7 @@ def act(self, game_state: dict) -> str:
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -166,7 +168,7 @@ def state_to_features(game_state: dict) -> np.array:
         if len(bomb_position) != 0:
             
             #bomb on neighbor?
-            if neighbor_pos[i] in bomb_position:
+            if np.any(np.sum(np.abs(bomb_position-neighbor_pos[i]), axis=1) == 0):
                 channels[i][3] = 1
 
             #bomb on player position?
@@ -179,7 +181,8 @@ def state_to_features(game_state: dict) -> np.array:
             for j in close_bomb_indices:                                                     #only look at close bombs
                 #if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
                 dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
-                if neighbor_pos in dangerous_tiles:                                     #if neighbor is on dangerous tile -> set danger value
+                if np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0):
+                                                         #if neighbor is on dangerous tile -> set danger value
                     channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
         
 

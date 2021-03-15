@@ -253,8 +253,9 @@ def state_to_features(game_state: dict) -> np.array:
     ################################################################################################################
     bomb_position = []
     for i in range(len(game_state['bombs'])):
-        bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][0]] )
+        bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1]] )
     bomb_position = np.array(bomb_position)
+    
     #print('bomb_position', bomb_position)
     #################################################################################################################
 
@@ -268,19 +269,20 @@ def state_to_features(game_state: dict) -> np.array:
     neighbor_pos = np.array(neighbor_pos)
     
     # distance from coins to player
-    if position_coins != []:
+    if position_coins.size > 0:
         d_coins = np.subtract(position_coins, player)   
         
         dist_norm = np.linalg.norm(d_coins, axis = 1)
-        #print(dist_norm)
+        
         closest_coin = position_coins[dist_norm.argmin()]
-        #print(dist_norm.argmin())
+        
         
         #find direction to go for closest coin:
         d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
-
+        
         #finding the direction that brings us closer the closest coin
-        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 0).argmin()
+        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 1)
+        priority_index = np.argsort(closest_neighbor)
 
     #creating channels for one-hot encoding
     channels = np.zeros((4,6))
@@ -291,7 +293,7 @@ def state_to_features(game_state: dict) -> np.array:
 ###################################################################################################
     #searching for near bombs:
     
-    if len(bomb_position)!=0:
+    if len(bomb_position) != 0:
         bomb_distances = np.linalg.norm( np.subtract(bomb_position, player) , axis = 1)
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
    
@@ -315,13 +317,9 @@ def state_to_features(game_state: dict) -> np.array:
             channels[i][1] = 1
 
         #finding coin:
-        if position_coins != []:
-            if neighbor_pos[i] in position_coins:
+        if position_coins.size > 0:
+            if np.any(np.sum(np.abs(position_coins-neighbor_pos[i]), axis=1) == 0):
                 channels[i][2] = 1
-
-            #describing priority:
-            if i == closest_neighbor:
-                channels[i][4] = 1
 
 ############################################################################################################
 
@@ -329,7 +327,7 @@ def state_to_features(game_state: dict) -> np.array:
         if len(bomb_position) != 0:
             
             #bomb on neighbor?
-            if neighbor_pos[i] in bomb_position:
+            if np.any(np.sum(np.abs(bomb_position-neighbor_pos[i]), axis=1) == 0):
                 channels[i][3] = 1
 
             #bomb on player position?
@@ -338,23 +336,29 @@ def state_to_features(game_state: dict) -> np.array:
             
             # are there dangerous tiles in the neighbors?
             bomb_tuples = [tuple(x) for x in bomb_position]
-           
+            #print(bomb_tuples)
             for j in close_bomb_indices:                                                     #only look at close bombs
-                if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
-                dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])  #get all tiles exploding with close bombs
-                if neighbor_pos in dangerous_tiles:                                     #if neighbor is on dangerous tile -> set danger value
+                #if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
+                dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
+                if np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0):
+                                                         #if neighbor is on dangerous tile -> set danger value
                     channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
         
 
             #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
-
             if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
                 if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
                     channels[i,5] = 1 
 
 #############################################################################################################
             
-        
+    
+    #describing priority:
+    if position_coins.size > 0:
+        for i in range(len(priority_index)):
+            if channels[priority_index[i]][0] != 1:
+                channels[priority_index[i]][4] = 1
+                break
         
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
@@ -383,5 +387,5 @@ def state_to_features(game_state: dict) -> np.array:
     stacked_channels = np.concatenate((stacked_channels, player_bomb))
     
 
-    
+    #print(stacked_channels)
     return stacked_channels
