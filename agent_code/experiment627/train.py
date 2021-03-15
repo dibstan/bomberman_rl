@@ -46,6 +46,8 @@ def setup_training(self):
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
     
+    self.fluctuations = []      # array for the fluctuations of each each round
+    self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
     
  
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -89,6 +91,11 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
+    # Store the fluctuations
+    self.max_fluctuations.append(np.max(self.fluctuations))     # saving the maximum fluctuation of round
+    self.fluctuations = []      # resetting the fluctuation array
+    with open('fluctuations.pt', 'wb') as file:
+        pickle.dump(self.max_fluctuations, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -195,6 +202,7 @@ def n_step_TD(self, n):
 
             n_future_rewards = transitions_array[:-1,3]   # rewards of the n-1 next actions
 
+
             discount = np.ones(n-1)*GAMMA   # discount for the i th future reward: GAMMA^i 
             for i in range(1,n):
                 discount[i-1] = discount[i-1]**i
@@ -202,6 +210,8 @@ def n_step_TD(self, n):
             Q_TD = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, last_state)   # value estimate using n-step temporal difference
             Q = np.dot(first_state, self.model[action])     # value estimate of current model
 
+            self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
+            
             GRADIENT = first_state * (Q_TD - Q)     # gradient descent
             
             self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
