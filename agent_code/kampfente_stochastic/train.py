@@ -41,7 +41,8 @@ def setup_training(self):
     except:
         self.model = None
     
-    self.fluctuations = []
+    self.fluctuations = []      # array for the fluctuations of each each round
+    self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
     
 
     
@@ -90,8 +91,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
     # Store the fluctuations
+    self.max_fluctuations.append(np.max(self.fluctuations))     # saving the maximum fluctuation of round
+    self.fluctuations = []      # resetting the fluctuation array
     with open('fluctuations.pt', 'wb') as file:
-        pickle.dump(self.fluctuations, file)
+        pickle.dump(self.max_fluctuations, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -129,18 +132,19 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         events.append(WAITING_EVENT)
     
 
-    # getting closer to coins
+    # Getting closer to coins
     # get positions of the player
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
     #define event coin_chaser
     coin_coordinates = old_game_state['coins']
-    old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
-    new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
-    
-    if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-        events.append(COIN_CHASER)
+    if len(coin_coordinates) != 0:          # Still coins available
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+        
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
 
 
 
@@ -183,14 +187,168 @@ def n_step_TD(self, n):
             Q_TD = np.dot(discount, n_future_rewards)
             
 
-        
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
-        self.fluctuations.append(Q_TD-Q)
+        self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
+
         GRADIENT = first_state * (Q_TD - Q)     # gradient descent
         
         self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -100,100)   # updating the model for the relevant action
         #print(self.model)
+
+        # Train with augmented data
+        #update with horizontally shifted state:
+        hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
+        self.model[hshift_action] = hshift_model_update
+
+        #update with vertically shifted state:
+        vshift_model_update, vshift_action = feature_augmentation(self, vertical_shift, first_state, last_state, action, discount, n_future_rewards, n)
+        self.model[vshift_action] = vshift_model_update
+
+        #update with turn left:
+        left_model_update, left_turn_action = feature_augmentation(self, turn_left, first_state, last_state, action, discount, n_future_rewards, n)
+        self.model[left_turn_action] = left_model_update
+
+        #update with turn right:
+        right_model_update, right_turn_action = feature_augmentation(self, turn_right, first_state, last_state, action, discount, n_future_rewards, n)
+        self.model[right_turn_action] = right_model_update
+
+        #update with turn around:
+        fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
+        self.model[fullturn_action] = fullturn_model_update
+
+
+
+def feature_augmentation(self, aug_direction, first_state, last_state, action, disc, n_future_rew, n):
+    shift_first_state, shift_action = aug_direction(first_state, action)
+    
+    if last_state is not None:  # value estimate using n-step temporal difference
+        shift_last_state, shift_action = aug_direction(last_state, action)
+        Q_TD_shift = np.dot(disc, n_future_rew) + GAMMA**n * Q_func(self, shift_last_state)   # value estimate using n-step temporal difference
+
+    else:
+        shift_last_state = None
+        Q_TD_shift = np.dot(disc, n_future_rew)
+
+    Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
+
+    GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+
+    return model_update, shift_action
+
+
+
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[10:15] = state[15:20]
+    shifted_state[15:20] = state[10:15]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def horizontal_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[0:5] = state[5:10]
+    shifted_state[5:10] = state[0:5]
+
+    #shifting actions
+    if action == "LEFT":
+        new_action = "RIGHT"
+    
+    elif action == "RIGHT":
+        new_action = "LEFT"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_left(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+
+    #up -> left 
+    turned_state[0:5] = state[10:15]
+    #down -> right
+    turned_state[5:10] = state[15:20]
+    #right -> up
+    turned_state[10:15] = state[5:10]
+    #left -> down
+    turned_state[15:20] = state[0:5]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'DOWN'
+    
+    elif action == 'RIGHT':
+        new_action = 'UP'
+
+    elif action == 'DOWN':
+        new_action = 'RIGHT'
+    
+    elif action == 'UP':
+        new_action = 'LEFT'
+
+    else:
+        new_action = action
+
+    return turned_state, new_action
+
+def turn_right(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+
+    #up -> left 
+    turned_state[0:5] = state[15:20]
+    #down -> right
+    turned_state[5:10] = state[10:15]
+    #right -> up
+    turned_state[10:15] = state[0:5]
+    #left -> down
+    turned_state[15:20] = state[5:10]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'UP'
+    
+    elif action == 'RIGHT':
+        new_action = 'DOWN'
+
+    elif action == 'DOWN':
+        new_action = 'LEFT'
+    
+    elif action == 'UP':
+        new_action = 'RIGHT'
+
+    else:
+        new_action = action
+
+    return turned_state, new_action
+
+def turn_around(state, action):
+    #first turn:
+    turn1, action1 = turn_left(state, action)
+
+    #second turn:
+    turn2, action2 = turn_left(turn1, action1)
+
+    return turn2, action2
 
 
 
