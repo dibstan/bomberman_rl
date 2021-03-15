@@ -177,7 +177,6 @@ def state_to_features(game_state: dict) -> np.array:
             
             # are there dangerous tiles in the neighbors?
             bomb_tuples = [tuple(x) for x in bomb_position]
-           
             for j in close_bomb_indices:                                                     #only look at close bombs
                 if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
                 dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])  #get all tiles exploding with close bombs
@@ -186,7 +185,6 @@ def state_to_features(game_state: dict) -> np.array:
         
 
             #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
-
             if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
                 if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
                     channels[i,5] = 1 

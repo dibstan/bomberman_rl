@@ -110,6 +110,7 @@ def reward_from_events(self, events: List[str]) -> int:
     }
     reward_sum = 0
     for event in events:
+        #if e.COIN_COLLECTED in events: print('coin')
         if event in game_rewards:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
@@ -134,8 +135,8 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
+    ############################################################################################################    
     #define event coin_chaser
-
     coin_coordinates = old_game_state['coins']
     if len(coin_coordinates) != 0:
         old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
@@ -145,7 +146,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
             events.append(COIN_CHASER)
 
-    ############################################################################################################
+    
      #define events with bombs
     old_bomb_coors = old_game_state['bombs']
 
