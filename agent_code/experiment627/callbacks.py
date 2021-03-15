@@ -222,5 +222,5 @@ def state_to_features(game_state: dict) -> np.array:
     stacked_channels = np.concatenate((stacked_channels, player_bomb))
     
 
-    
+    print(stacked_channels)
     return stacked_channels
