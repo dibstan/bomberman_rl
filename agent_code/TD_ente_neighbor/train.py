@@ -178,26 +178,25 @@ def n_step_TD(self, n):
 
 
             #update with horizontally shifted state:
-            hshift_first_state, hshift_action = horizontal_shift(first_state, action)
-            hshift_last_state, hshift_action = horizontal_shift(last_state, action)
-
-            Q_TD_hshift = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, hshift_last_state)   # value estimate using n-step temporal difference
-            Q_hshift = np.dot(hshift_first_state, self.model[hshift_action])     # value estimate of current model
-
-            GRADIENT = first_state * (Q_TD_hshift - Q_hshift)     # gradient descent
-            
-            self.model[hshift_action] = self.model[hshift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+            hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[hshift_action] = hshift_model_update
 
             #update with vertically shifted state:
-            vshift_first_state, vshift_action = vertical_shift(first_state, action)
-            vshift_last_state, vshift_action = vertical_shift(last_state, action)
+            vshift_model_update, vshift_action = feature_augmentation(self, vertical_shift, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[vshift_action] = vshift_model_update
 
-            Q_TD_vshift = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, vshift_last_state)   # value estimate using n-step temporal difference
-            Q_vshift = np.dot(vshift_first_state, self.model[vshift_action])     # value estimate of current model
+            #update with turn left:
+            left_model_update, left_turn_action = feature_augmentation(self, turn_left, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[left_turn_action] = left_model_update
 
-            GRADIENT = first_state * (Q_TD_vshift - Q_vshift)     # gradient descent
-            
-            self.model[vshift_action] = self.model[vshift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+            #update with turn right:
+            right_model_update, right_turn_action = feature_augmentation(self, turn_right, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[right_turn_action] = right_model_update
+
+            #update with turn around:
+            fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[fullturn_action] = fullturn_model_update
+
 
 
 
@@ -212,6 +211,18 @@ def Q_func(self, state):
     
     return np.max(np.dot(vec_model, state))      # return the max Q value
 
+
+def feature_augmentation(self, aug_direction, first_state, last_state, action, disc, n_future_rew, n):
+    shift_first_state, shift_action = aug_direction(first_state, action)
+    shift_last_state, shift_action = aug_direction(last_state, action)
+
+    Q_TD_shift = np.dot(disc, n_future_rew) + GAMMA**n * Q_func(self, shift_last_state)   # value estimate using n-step temporal difference
+    Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
+
+    GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+
+    return model_update, shift_action
 
 def vertical_shift(state, action):
     #initializing the shifted state:
