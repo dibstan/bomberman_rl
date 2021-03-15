@@ -42,7 +42,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 0
+    random_prob = 0.2
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -57,7 +57,7 @@ def act(self, game_state: dict) -> str:
     return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
 
 
-'''def state_to_features(game_state: dict) -> np.array:
+def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
 
@@ -170,9 +170,8 @@ def act(self, game_state: dict) -> str:
 
     
     return stacked_channels
-'''
 
-def state_to_features(game_state: dict) -> np.array:
+'''def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
 
@@ -193,20 +192,15 @@ def state_to_features(game_state: dict) -> np.array:
     
     #get player position:
     player = np.array(game_state['self'][3])
-    
+
     #converting positions of coins and bombs
     position_coins = np.array(game_state['coins'])
-    #print('coins:', position_coins)
-
-    bomb_position = []
-    for i in range(len(game_state['bombs'])):
-        bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][0]] )
-    bomb_position = np.array(bomb_position)
+    bomb_position = np.array(game_state['bombs'], dtype = object)
 
     #positions of neigboring tiles in the order (Left, Right, Up, Down)
     neighbor_pos = []
     neighbor_pos.append((player[0], player[1] - 1))
-    neighbor_pos.append((player[0], player[1] + 1))
+    neighbor_pos.append((player[0], player [1] + 1))
     neighbor_pos.append((player[0] - 1, player[1]))
     neighbor_pos.append((player[0] + 1, player[1]))
     neighbor_pos = np.array(neighbor_pos)
@@ -246,38 +240,38 @@ def state_to_features(game_state: dict) -> np.array:
         if field_value == 1:
             channels[i][1] = 1
 
-        #finding coin:
-        if position_coins.size > 0:
-            if neighbor_pos[i] in position_coins:
-                channels[i][2] = 1
+    #finding coin:
+    if position_coins != []:
+        #if neighbor_pos[i] in position_coins:
+        print(neighbor_pos)
+        print(position_coins)
+        index = np.where((neighbor_pos == position_coins).all(axis = 1))[0]
+        if index.size > 0:
+            channels[index][2] = 1
 
-            #describing priority:
-            if i == closest_neighbor:
-                channels[i][4] = 1
-
-        #finding bomb:
-        if len(bomb_position) != 0:
+    #finding bomb:
+    if bomb_position != []:
             
-            #bomb on neighbor?
-            if neighbor_pos[i] in bomb_position:
-                channels[i][3] = 1
+        #bomb on neighbor?
+        index = np.where((neighbor_pos == bomb_position[:,0]).all(axis = 1))[0]
+        if index.size > 0:
+            channels[index][3] = 1
 
-            #bomb on player position?
-            if player in bomb_position:
-                player_tile[1] = 1            
+        #bomb on player position?
+        if player in bomb_position[:,0]:
+            player_tile[1] = 1
         
-        
+
+
+    #describing priority:
+    channels[closest_neighbor][4] = 1    
+    
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
 
     #player on coin?
     if player in position_coins:
         player_tile[0] = 1
-
-    #player on bomb?
-    if len(bomb_position)!=0:
-        if player in bomb_position:
-            player_tile[1] = 1
 
     #combining neighbor describtion with current tile describtion:
     stacked_channels = np.concatenate((stacked_channels, player_tile))
@@ -295,4 +289,4 @@ def state_to_features(game_state: dict) -> np.array:
     
 
     
-    return stacked_channels
+    return stacked_channels'''

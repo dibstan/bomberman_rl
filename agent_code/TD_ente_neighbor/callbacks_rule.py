@@ -90,7 +90,7 @@ def act(self, game_state):
     what it contains.
     """
     self.logger.info(state_to_features(game_state))
-    random_prob = 0.4
+    random_prob = 0.2
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -305,7 +305,7 @@ def state_to_features(game_state: dict) -> np.array:
         
     #describing priority:
     if position_coins != []:
-        channels[closest_neighbor][4] = 1  
+        channels[closest_neighbor][4] = 1   
 
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
@@ -328,8 +328,5 @@ def state_to_features(game_state: dict) -> np.array:
     #combining and returning state_vector:
     stacked_channels = np.concatenate((stacked_channels, player_bomb))
     
-
-    
-    return stacked_channels
 
     

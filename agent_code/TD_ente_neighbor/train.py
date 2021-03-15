@@ -92,11 +92,11 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 12,
+        e.COIN_COLLECTED: 15,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -20,
         WAITING_EVENT: -3,
-        e.INVALID_ACTION: -7,
+        e.INVALID_ACTION: -5,
         COIN_CHASER: 0,
         VALID_ACTION: 0
     }
@@ -278,17 +278,20 @@ def turn_left(state, action):
     turned_state[15:20] = state[0:5]
 
     #shifting actions
-    if action == "LEFT":
-        new_action = "DOWN"
+    if action == 'LEFT':
+        new_action = 'DOWN'
     
-    elif action == "RIGHT":
-        new_action = "UP"
+    elif action == 'RIGHT':
+        new_action = 'UP'
 
-    elif action == "DOWN":
-        new_action = "RIGHT"
+    elif action == 'DOWN':
+        new_action = 'RIGHT'
     
-    elif action == "UP":
-        new_action = "LEFT"
+    elif action == 'UP':
+        new_action = 'LEFT'
+
+    else:
+        new_action = action
 
     return turned_state, new_action
 
@@ -306,17 +309,20 @@ def turn_right(state, action):
     turned_state[15:20] = state[5:10]
 
     #shifting actions
-    if action == "LEFT":
-        new_action = "UP"
+    if action == 'LEFT':
+        new_action = 'UP'
     
-    elif action == "RIGHT":
-        new_action = "DOWN"
+    elif action == 'RIGHT':
+        new_action = 'DOWN'
 
-    elif action == "DOWN":
-        new_action = "LEFT"
+    elif action == 'DOWN':
+        new_action = 'LEFT'
     
-    elif action == "UP":
-        new_action = "RIGHT"
+    elif action == 'UP':
+        new_action = 'RIGHT'
+
+    else:
+        new_action = action
 
     return turned_state, new_action
 

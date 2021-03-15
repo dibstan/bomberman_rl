@@ -130,7 +130,7 @@ def state_to_features(game_state: dict) -> np.array:
 ###################################################################################################
     #searching for near bombs:
     
-    if len(bomb_position)!=0:
+    if len(bomb_position) != 0:
         bomb_distances = np.linalg.norm( np.subtract(bomb_position, player) , axis = 1)
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
    
@@ -154,7 +154,7 @@ def state_to_features(game_state: dict) -> np.array:
             channels[i][1] = 1
 
         #finding coin:
-        if position_coins != []:
+        if position_coins.size > 0:
             if neighbor_pos[i] in position_coins:
                 channels[i][2] = 1
 

@@ -153,37 +153,42 @@ def state_to_features(game_state: dict) -> np.array:
     
     #get player position:
     player = np.array(game_state['self'][3])
-
+    
     #converting positions of coins and bombs
     position_coins = np.array(game_state['coins'])
-    bomb_position = np.array(game_state['bombs'], dtype = object)
+    #print('coins:', position_coins)
 
-    # distance from coins to player
-    d_coins = np.subtract(position_coins, player)   
-    
-    euc_dist = np.linalg.norm(d_coins, axis = 0)
+    bomb_position = []
+    for i in range(len(game_state['bombs'])):
+        bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][0]] )
+    bomb_position = np.array(bomb_position)
 
-    closest_coin = position_coins[euc_dist.argmin()]
-
-    
     #positions of neigboring tiles in the order (Left, Right, Up, Down)
     neighbor_pos = []
     neighbor_pos.append((player[0], player[1] - 1))
-    neighbor_pos.append((player[0], player [1] + 1))
+    neighbor_pos.append((player[0], player[1] + 1))
     neighbor_pos.append((player[0] - 1, player[1]))
     neighbor_pos.append((player[0] + 1, player[1]))
     neighbor_pos = np.array(neighbor_pos)
     
-    
-    #find direction to go for closest coin:
-    d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
+    # distance from coins to player
+    if position_coins != []:
+        d_coins = np.subtract(position_coins, player)   
+        
+        dist_norm = np.linalg.norm(d_coins, axis = 1)
+        #print(dist_norm)
+        closest_coin = position_coins[dist_norm.argmin()]
+        #print(dist_norm.argmin())
+        
+        #find direction to go for closest coin:
+        d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
 
-    #finding the direction that brings us closer the closest coin
-    closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 0).argmin()
+        #finding the direction that brings us closer the closest coin
+        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 0).argmin()
 
     #creating channels for one-hot encoding
-    channels = [np.zeros(5) for i in range(4)]
-
+    channels = np.zeros((4,5))
+    
     #describing field of agent:
     player_tile = np.zeros(2) #... adjust to 3 when Danger feature is added
 
@@ -202,22 +207,25 @@ def state_to_features(game_state: dict) -> np.array:
             channels[i][1] = 1
 
         #finding coin:
-        if neighbor_pos[i] in position_coins:
-            channels[i][2] = 1
+        if position_coins.size > 0:
+            if neighbor_pos[i] in position_coins:
+                channels[i][2] = 1
+
+            #describing priority:
+            if i == closest_neighbor:
+                channels[i][4] = 1
 
         #finding bomb:
-        if bomb_position != []:
+        if len(bomb_position) != 0:
             
             #bomb on neighbor?
-            if neighbor_pos[i] in bomb_position[:,0]:
+            if neighbor_pos[i] in bomb_position:
                 channels[i][3] = 1
 
             #bomb on player position?
-            if player in bomb_position[:,0]:
-                player_tile[1] = 1
-        #describing priority:
-        if i == closest_neighbor:
-            channels[i][4] = 1
+            if player in bomb_position:
+                player_tile[1] = 1            
+        
         
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
@@ -225,6 +233,11 @@ def state_to_features(game_state: dict) -> np.array:
     #player on coin?
     if player in position_coins:
         player_tile[0] = 1
+
+    #player on bomb?
+    if len(bomb_position)!=0:
+        if player in bomb_position:
+            player_tile[1] = 1
 
     #combining neighbor describtion with current tile describtion:
     stacked_channels = np.concatenate((stacked_channels, player_tile))
@@ -243,7 +256,6 @@ def state_to_features(game_state: dict) -> np.array:
 
     
     return stacked_channels
-
 
 
 
