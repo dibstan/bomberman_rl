@@ -190,9 +190,10 @@ def n_step_TD(self, n):
         else:
             Q_TD = np.dot(discount, n_future_rewards)
             
-        print(action)
-        print(n_future_rewards)
-        print(Q_TD)
+        #print(action)
+        #print(n_future_rewards)
+        #print(Q_TD)
+        
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
         self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
