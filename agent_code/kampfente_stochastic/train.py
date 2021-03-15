@@ -228,9 +228,9 @@ def n_step_TD(self, n):
         
         self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
 
-        GRADIENT = first_state * (Q_TD - Q)     # gradient descent
+        GRADIENT = first_state * np.clip((Q_TD - Q), -10,10)     # gradient descent
         
-        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -100,100)   # updating the model for the relevant action
+        self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
         #print(self.model)
 
         '''# Train with augmented data
