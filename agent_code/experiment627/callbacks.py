@@ -47,7 +47,9 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    if self.model == None: random_prob = 0
+    if self.model == None: 
+        random_prob = 0
+
     else: random_prob = 1
 
     if self.train and random.random() < random_prob:
@@ -60,7 +62,7 @@ def act(self, game_state: dict) -> str:
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,0,.2])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -108,19 +110,20 @@ def state_to_features(game_state: dict) -> np.array:
     neighbor_pos = np.array(neighbor_pos)
     
     # distance from coins to player
-    if position_coins != []:
+    if position_coins.size > 0:
         d_coins = np.subtract(position_coins, player)   
         
         dist_norm = np.linalg.norm(d_coins, axis = 1)
-        #print(dist_norm)
+        
         closest_coin = position_coins[dist_norm.argmin()]
-        #print(dist_norm.argmin())
+        
         
         #find direction to go for closest coin:
         d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
-
+        
         #finding the direction that brings us closer the closest coin
-        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 0).argmin()
+        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 1)
+        priority_index = np.argsort(closest_neighbor)
 
     #creating channels for one-hot encoding
     channels = np.zeros((4,6))
@@ -156,12 +159,8 @@ def state_to_features(game_state: dict) -> np.array:
 
         #finding coin:
         if position_coins.size > 0:
-            if neighbor_pos[i] in position_coins:
+            if np.any(np.sum(np.abs(position_coins-neighbor_pos[i]), axis=1) == 0):
                 channels[i][2] = 1
-
-            #describing priority:
-            if i == closest_neighbor:
-                channels[i][4] = 1
 
 ############################################################################################################
 
@@ -169,7 +168,7 @@ def state_to_features(game_state: dict) -> np.array:
         if len(bomb_position) != 0:
             
             #bomb on neighbor?
-            if neighbor_pos[i] in bomb_position:
+            if np.any(np.sum(np.abs(bomb_position-neighbor_pos[i]), axis=1) == 0):
                 channels[i][3] = 1
 
             #bomb on player position?
@@ -182,7 +181,8 @@ def state_to_features(game_state: dict) -> np.array:
             for j in close_bomb_indices:                                                     #only look at close bombs
                 #if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
                 dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
-                if neighbor_pos in dangerous_tiles:                                     #if neighbor is on dangerous tile -> set danger value
+                if np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0):
+                                                         #if neighbor is on dangerous tile -> set danger value
                     channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
         
 
@@ -193,7 +193,13 @@ def state_to_features(game_state: dict) -> np.array:
 
 #############################################################################################################
             
-        
+    
+    #describing priority: 
+    if position_coins.size > 0:
+        for i in range(len(priority_index)):
+            if channels[priority_index[i]][0] != 1:
+                channels[priority_index[i]][4] = 1
+                break
         
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
@@ -222,5 +228,5 @@ def state_to_features(game_state: dict) -> np.array:
     stacked_channels = np.concatenate((stacked_channels, player_bomb))
     
 
-    print(stacked_channels)
+    #print(stacked_channels)
     return stacked_channels
