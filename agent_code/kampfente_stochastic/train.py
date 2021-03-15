@@ -19,9 +19,11 @@ N = 5   # N step temporal difference
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
-COIN_CHASER = "CLOSER_TO_COIN"
-COIN_AVOIDER = "FURTHER_FROM_COIN"
 VALID_ACTION = "VALID_ACTION"
+COIN_CHASER = "COIN_CHASER"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
+INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 
 
@@ -41,6 +43,9 @@ def setup_training(self):
             self.model = pickle.load(file)
     except:
         self.model = None
+
+    with open('explosion_map.pt', 'rb') as file:
+        self.exploding_tiles_map = pickle.load(file)
     
     self.fluctuations = []      # array for the fluctuations of each each round
     self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
@@ -107,14 +112,16 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 30,
+        e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -200,
-        WAITING_EVENT: -5,
+        e.KILLED_SELF: -20,
+        WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
-        COIN_CHASER: 9,
-        VALID_ACTION: 0,
-        COIN_AVOIDER: -5
+        COIN_CHASER: 0.5,
+        VALID_ACTION: -1,
+        MOVED_AWAY_FROM_BOMB: 1,
+        WAITED_IN_EXPLOSION_RANGE: -1,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
     }
     reward_sum = 0
     for event in events:
@@ -142,16 +149,36 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
+    ############################################################################################################    
     #define event coin_chaser
     coin_coordinates = old_game_state['coins']
-    if len(coin_coordinates) != 0:          # Still coins available
+    if len(coin_coordinates) != 0:
         old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
         new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
-        
+
+    
         if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
             events.append(COIN_CHASER)
-        elif min(new_coin_distances) > min(old_coin_distances):
-            events.append(COIN_AVOIDER)
+
+    
+     #define events with bombs
+    old_bomb_coors = old_game_state['bombs']
+
+    dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:
+            dangerous_tiles.append(coor)
+
+    if dangerous_tiles != []:       
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_AWAY_FROM_BOMB)
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
+            #print('waited')
+            events.append(WAITED_IN_EXPLOSION_RANGE)
+        if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+            #print('invalid')
+            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
+    ######################################################################################################
 
 
 
@@ -193,9 +220,9 @@ def n_step_TD(self, n):
         else:
             Q_TD = np.dot(discount, n_future_rewards)
         
-        print(action)
+        '''print(action)
         print(n_future_rewards)
-        print(Q_TD)
+        print(Q_TD)'''
 
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
@@ -206,7 +233,7 @@ def n_step_TD(self, n):
         self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -100,100)   # updating the model for the relevant action
         #print(self.model)
 
-        # Train with augmented data
+        '''# Train with augmented data
         #update with horizontally shifted state:
         hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
         self.model[hshift_action] = hshift_model_update
@@ -225,7 +252,7 @@ def n_step_TD(self, n):
 
         #update with turn around:
         fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[fullturn_action] = fullturn_model_update
+        self.model[fullturn_action] = fullturn_model_update'''
 
 
 
@@ -254,8 +281,8 @@ def vertical_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[10:15] = state[15:20]
-    shifted_state[15:20] = state[10:15]
+    shifted_state[12:18] = state[18:24]
+    shifted_state[18:24] = state[12:18]
 
     #shifting actions
     if action == "UP":
@@ -274,8 +301,8 @@ def horizontal_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:5] = state[5:10]
-    shifted_state[5:10] = state[0:5]
+    shifted_state[0:6] = state[6:12]
+    shifted_state[6:12] = state[0:6]
 
     #shifting actions
     if action == "LEFT":
@@ -294,13 +321,13 @@ def turn_left(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:5] = state[10:15]
+    turned_state[0:6] = state[12:18]
     #down -> right
-    turned_state[5:10] = state[15:20]
+    turned_state[6:12] = state[18:24]
     #right -> up
-    turned_state[10:15] = state[5:10]
+    turned_state[12:18] = state[6:12]
     #left -> down
-    turned_state[15:20] = state[0:5]
+    turned_state[18:24] = state[0:6]
 
     #shifting actions
     if action == 'LEFT':
@@ -325,13 +352,13 @@ def turn_right(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:5] = state[15:20]
+    turned_state[0:6] = state[18:24]
     #down -> right
-    turned_state[5:10] = state[10:15]
+    turned_state[6:12] = state[12:18]
     #right -> up
-    turned_state[10:15] = state[0:5]
+    turned_state[12:18] = state[0:6]
     #left -> down
-    turned_state[15:20] = state[5:10]
+    turned_state[18:24] = state[6:12]
 
     #shifting actions
     if action == 'LEFT':
