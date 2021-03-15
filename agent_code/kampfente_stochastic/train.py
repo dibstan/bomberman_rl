@@ -14,12 +14,13 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.0001    # learning rate
-GAMMA = 0.6     # discount rate
+GAMMA = 0.2     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
 COIN_CHASER = "CLOSER_TO_COIN"
+COIN_AVOIDER = "FURTHER_FROM_COIN"
 VALID_ACTION = "VALID_ACTION"
 
 
@@ -105,11 +106,12 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 30,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -30,
+        e.KILLED_SELF: -200,
         WAITING_EVENT: -5,
         e.INVALID_ACTION: -7,
         COIN_CHASER: 9,
-        VALID_ACTION: -2
+        VALID_ACTION: 0,
+        COIN_AVOIDER: -5
     }
     reward_sum = 0
     for event in events:
@@ -145,6 +147,8 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         
         if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
             events.append(COIN_CHASER)
+        elif min(new_coin_distances) > min(old_coin_distances):
+            events.append(COIN_AVOIDER)
 
 
 
@@ -186,7 +190,9 @@ def n_step_TD(self, n):
         else:
             Q_TD = np.dot(discount, n_future_rewards)
             
-
+        print(action)
+        print(n_future_rewards)
+        print(Q_TD)
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
         self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
