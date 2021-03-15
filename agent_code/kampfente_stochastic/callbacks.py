@@ -233,32 +233,112 @@ def state_to_features(game_state: dict) -> np.array:
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
+
     if game_state is None:
         return None
     
-    channels = []
+    #get player position:
+    player = np.array(game_state['self'][3])
     
-    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
+    #converting positions of coins and bombs
+    position_coins = np.array(game_state['coins'])
+    #print('coins:', position_coins)
 
-    position_self = np.array(game_state['self'][3])     # position of player self
+    bomb_position = []
+    for i in range(len(game_state['bombs'])):
+        bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1]] )
+    bomb_position = np.array(bomb_position)
 
-
-    # COINS
-    position_coins = np.array(game_state['coins'])      # position of the coins
+    #positions of neigboring tiles in the order (Left, Right, Up, Down)
+    neighbor_pos = []
+    neighbor_pos.append((player[0], player[1] - 1))
+    neighbor_pos.append((player[0], player[1] + 1))
+    neighbor_pos.append((player[0] - 1, player[1]))
+    neighbor_pos.append((player[0] + 1, player[1]))
+    neighbor_pos = np.array(neighbor_pos)
+    
+    # distance from coins to player
+    if position_coins != []:
+        d_coins = np.subtract(position_coins, player)   
         
-    d_coins = position_coins - position_self   # distance from coins to player
+        dist_norm = np.linalg.norm(d_coins, axis = 1)
+        #print(dist_norm)
+        closest_coin = position_coins[dist_norm.argmin()]
+        #print(dist_norm.argmin())
+        
+        #find direction to go for closest coin:
+        d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
 
-    for i in range(9):
-        if i < len(d_coins):
-            channels.append(d_coins[i])
-        else:
-            channels.append([0,0])
+        #finding the direction that brings us closer the closest coin
+        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 0).argmin()
 
-    # SELF    
-    channels.append(position_self)
-
-    # concatenate them as a feature tensor (they must have the same shape), ...
-    stacked_channels = np.stack(channels).reshape(-1)
-    # and return them as a vector
+    #creating channels for one-hot encoding
+    channels = np.zeros((4,5))
     
-    return stacked_channels.reshape(-1)
+    #describing field of agent:
+    player_tile = np.zeros(2) #... adjust to 3 when Danger feature is added
+
+    #each direction is encoded by [wall, crate, coin, bomb, priority] ...danger value to come
+
+    for i in range(np.shape(neighbor_pos)[0]):
+        
+        #finding a wall:
+        field_value = game_state['field'][neighbor_pos[i][0]][neighbor_pos[i][1]] 
+
+        if field_value == -1:
+            channels[i][0] = 1
+        
+        #finding crate
+        if field_value == 1:
+            channels[i][1] = 1
+
+        #finding coin:
+        if position_coins.size > 0:
+            if neighbor_pos[i] in position_coins:
+                channels[i][2] = 1
+
+            #describing priority:
+            if i == closest_neighbor:
+                channels[i][4] = 1
+
+        #finding bomb:
+        if len(bomb_position) != 0:
+            
+            #bomb on neighbor?
+            if neighbor_pos[i] in bomb_position:
+                channels[i][3] = 1
+
+            #bomb on player position?
+            if player in bomb_position:
+                player_tile[1] = 1            
+        
+        
+    #combining current channels:
+    stacked_channels = np.stack(channels).reshape(-1)
+
+    #player on coin?
+    if player in position_coins:
+        player_tile[0] = 1
+
+    #player on bomb?
+    if len(bomb_position)!=0:
+        if player in bomb_position:
+            player_tile[1] = 1
+
+    #combining neighbor describtion with current tile describtion:
+    stacked_channels = np.concatenate((stacked_channels, player_tile))
+
+    
+    #does our player have a bomb?
+    player_bomb = []
+    if game_state['self'][2]:
+        player_bomb.append(1)
+    else:
+        player_bomb.append(0)
+
+    #combining and returning state_vector:
+    stacked_channels = np.concatenate((stacked_channels, player_bomb))
+    
+
+    
+    return stacked_channels
