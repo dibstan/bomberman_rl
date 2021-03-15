@@ -49,7 +49,7 @@ def act(self, game_state: dict) -> str:
     self.logger.info(state_to_features(game_state))
     if self.model == None: 
         random_prob = 0
-        
+
     else: random_prob = 1
 
     if self.train and random.random() < random_prob:
@@ -62,7 +62,7 @@ def act(self, game_state: dict) -> str:
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,0,.2])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -194,11 +194,12 @@ def state_to_features(game_state: dict) -> np.array:
 #############################################################################################################
             
     
-    #describing priority:
-    for i in range(len(priority_index)):
-        if channels[priority_index[i]][0] != 1:
-            channels[priority_index[i]][4] = 1
-            break
+    #describing priority: 
+    if position_coins.size > 0:
+        for i in range(len(priority_index)):
+            if channels[priority_index[i]][0] != 1:
+                channels[priority_index[i]][4] = 1
+                break
         
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
