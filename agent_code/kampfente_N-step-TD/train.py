@@ -14,8 +14,8 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.0001    # learning rate
-GAMMA = 0.2     # discount rate
-N = 6   # N step temporal difference
+GAMMA = 0.6     # discount rate
+N = 5   # N step temporal difference
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
@@ -40,6 +40,8 @@ def setup_training(self):
             self.model = pickle.load(file)
     except:
         self.model = None
+    
+    self.fluctuations = []
     
 
     
@@ -87,6 +89,9 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
+    # Store the fluctuations
+    with open('fluctuations.pt', 'wb') as file:
+        pickle.dump(self.fluctuations, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -97,11 +102,11 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 30,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -20,
+        e.KILLED_SELF: -30,
         WAITING_EVENT: -5,
         e.INVALID_ACTION: -7,
-        #COIN_CHASER: 7,
-        VALID_ACTION: -1
+        COIN_CHASER: 9,
+        VALID_ACTION: -2
     }
     reward_sum = 0
     for event in events:
@@ -124,7 +129,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         events.append(WAITING_EVENT)
     
 
-    '''# getting closer to coins
+    # getting closer to coins
     # get positions of the player
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
@@ -135,7 +140,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
     
     if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-        events.append(COIN_CHASER)'''
+        events.append(COIN_CHASER)
 
 
 
@@ -163,7 +168,7 @@ def n_step_TD(self, n):
 
         first_state = transitions_array[0,0]    # first state saved in the cache
 
-        last_state = transitions_array[-1,0]     # last state saved in the cache
+        last_state = transitions_array[-1,2]     # last state saved in the cache
 
         n_future_rewards = transitions_array[:,3]   # rewards of the n next actions
 
@@ -171,14 +176,20 @@ def n_step_TD(self, n):
         for i in range(1,n+1):
             discount[i-1] = discount[i-1]**i
 
-        Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state)   # value estimate using n-step temporal difference
-        
-        #print(Q_TD)
-        Q = np.dot(first_state, self.model[action])     # value estimate of current model
+        if last_state is not None:  # value estimate using n-step temporal difference
+            Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state) 
+   
+        else:
+            Q_TD = np.dot(discount, n_future_rewards)
+            
 
+        
+        Q = np.dot(first_state, self.model[action])     # value estimate of current model
+        
+        self.fluctuations.append(Q_TD-Q)
         GRADIENT = first_state * (Q_TD - Q)     # gradient descent
         
-        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -100,100)   # updating the model for the relevant action
         #print(self.model)
 
 
