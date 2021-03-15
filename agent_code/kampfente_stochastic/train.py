@@ -13,7 +13,7 @@ Transition = namedtuple('Transition',
 
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.0001    # learning rate
+ALPHA = 0.001    # learning rate
 GAMMA = 0.5     # discount rate
 N = 5   # N step temporal difference
 
@@ -211,8 +211,8 @@ def n_step_TD(self, n):
         n_future_rewards = transitions_array[:,3]   # rewards of the n next actions
 
         discount = np.ones(n)*GAMMA   # discount for the i th future reward: GAMMA^i 
-        for i in range(1,n+1):
-            discount[i-1] = discount[i-1]**i
+        for i in range(0,n):
+            discount[i] = discount[i]**i
 
         if last_state is not None:  # value estimate using n-step temporal difference
             Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state) 
