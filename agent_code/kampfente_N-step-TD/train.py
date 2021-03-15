@@ -41,7 +41,8 @@ def setup_training(self):
     except:
         self.model = None
     
-    self.fluctuations = []
+    self.fluctuations = []      # array for the fluctuations of each each round
+    self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
     
 
     
@@ -90,8 +91,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
     # Store the fluctuations
+    self.max_fluctuations.append(np.max(self.fluctuations))     # saving the maximum fluctuation of round
+    self.fluctuations = []      # resetting the fluctuation array
     with open('fluctuations.pt', 'wb') as file:
-        pickle.dump(self.fluctuations, file)
+        pickle.dump(self.max_fluctuations, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -129,7 +132,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         events.append(WAITING_EVENT)
     
 
-    # getting closer to coins
+    # Getting closer to coins
     # get positions of the player
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
@@ -183,10 +186,10 @@ def n_step_TD(self, n):
             Q_TD = np.dot(discount, n_future_rewards)
             
 
-        
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
-        self.fluctuations.append(Q_TD-Q)
+        self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
+
         GRADIENT = first_state * (Q_TD - Q)     # gradient descent
         
         self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -100,100)   # updating the model for the relevant action
