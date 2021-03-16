@@ -19,15 +19,17 @@ Transition = namedtuple('Transition',
 # Hyper parameters
 TRANSITION_HISTORY_SIZE = 1000  # keep only ... last transitions
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':500, 'learning_rate':0.1, 'max_depth':500}  # parameters for the GradientBoostingRegressor
-GAMMA = 0.8
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':0.1, 'max_depth':8}  # parameters for the GradientBoostingRegressor
+GAMMA = 0.01
 
 
-# Events
+# Auxillary events
 WAITING_EVENT = "WAIT"
-COIN_CHASER = "CLOSER_TO_COIN"
+VALID_ACTION = "VALID_ACTION"
+COIN_CHASER = "COIN_CHASER"
 MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
 WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
+INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
@@ -60,17 +62,12 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
     self.logger.info(self_action)
 
-    # additional events
-    if self_action == "WAIT":
-        events.append(WAITING_EVENT)
-
-    # Auxillary events
-    if self_action == "WAIT":
-        events.append(WAITING_EVENT)
-
     
     #define auxillary events depending on the transition
     if old_game_state is not None:
+
+        # Adding auxillary Events
+        aux_events(self, old_game_state, self_action, new_game_state, events)
 
         #get positions of the player
         old_player_coor = old_game_state['self'][3]     
@@ -126,26 +123,27 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
 
 def reward_from_events(self, events: List[str]) -> int:
-    """
-    *This is not a required function, but an idea to structure your code.*
-
-    Here you can modify the rewards your agent get so as to en/discourage
-    certain behavior.
-    """
+    '''
+        Input: self, list of events
+        Output: sum of rewards resulting from the events
+    '''
     game_rewards = {
-        e.COIN_COLLECTED: 10,
+        e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -3,
-        WAITING_EVENT: -1,
-        e.INVALID_ACTION: -10
+        e.KILLED_SELF: -20,
+        WAITING_EVENT: -3,
+        e.INVALID_ACTION: -7,
+        COIN_CHASER: 0.5,
+        VALID_ACTION: -1,
+        MOVED_AWAY_FROM_BOMB: 1,
+        WAITED_IN_EXPLOSION_RANGE: -1,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
     }
-    #print(events)
     reward_sum = 0
     for event in events:
         if event in game_rewards:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
-    #print(reward_sum)
     return reward_sum
 
 def experience_replay(self):
@@ -191,3 +189,50 @@ def experience_replay(self):
            
 
 
+def aux_events(self, old_game_state, self_action, new_game_state, events):
+
+    # Valid action
+    if e.INVALID_ACTION not in events:
+        events.append(VALID_ACTION)
+
+
+    # Waiting
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+    
+
+    # Getting closer to coins
+    # get positions of the player
+    old_player_coor = old_game_state['self'][3]     
+    new_player_coor = new_game_state['self'][3]
+        
+    ############################################################################################################    
+    #define event coin_chaser
+    coin_coordinates = old_game_state['coins']
+    if len(coin_coordinates) != 0:
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+
+    
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
+
+    
+     #define events with bombs
+    old_bomb_coors = old_game_state['bombs']
+
+    dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:
+            dangerous_tiles.append(coor)
+
+    if dangerous_tiles != []:       
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_AWAY_FROM_BOMB)
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
+            #print('waited')
+            events.append(WAITED_IN_EXPLOSION_RANGE)
+        if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+            #print('invalid')
+            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
+    ######################################################################################################

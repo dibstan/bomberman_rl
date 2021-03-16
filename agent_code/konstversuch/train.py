@@ -113,7 +113,7 @@ def reward_from_events(self, events: List[str]) -> int:
     '''
     game_rewards = {
         e.COIN_COLLECTED: 12,
-        e.KILLED_OPPONENT: 5,
+        e.KILLED_OPPONENT: 10,
         e.KILLED_SELF: -20,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
@@ -281,8 +281,8 @@ def horizontal_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[12:18] = state[18:24]
-    shifted_state[18:24] = state[12:18]
+    shifted_state[16:24] = state[24:32]
+    shifted_state[24:32] = state[16:24]
 
     #shifting actions
     if action == "LEFT":
@@ -301,8 +301,8 @@ def vertical_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:6] = state[6:12]
-    shifted_state[6:12] = state[0:6]
+    shifted_state[0:8] = state[8:16]
+    shifted_state[8:16] = state[0:8]
 
     #shifting actions
     if action == "UP":
@@ -321,13 +321,13 @@ def turn_right(state, action):
     turned_state = np.copy(state)
     
     #up -> left 
-    turned_state[0:6] = state[12:18]
+    turned_state[0:8] = state[16:24]
     #down -> right
-    turned_state[6:12] = state[18:24]
+    turned_state[8:16] = state[24:32]
     #right -> up
-    turned_state[12:18] = state[6:12]
+    turned_state[16:24] = state[8:16]
     #left -> down
-    turned_state[18:24] = state[0:6]
+    turned_state[24:32] = state[0:8]
 
     #shifting actions
     if action == 'LEFT':
@@ -352,13 +352,13 @@ def turn_left(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:6] = state[18:24]
+    turned_state[0:8] = state[24:32]
     #down -> right
-    turned_state[6:12] = state[12:18]
+    turned_state[8:16] = state[16:24]
     #right -> up
-    turned_state[12:18] = state[0:6]
+    turned_state[16:24] = state[0:8]
     #left -> down
-    turned_state[18:24] = state[6:12]
+    turned_state[24:32] = state[8:16]
 
     #shifting actions
     if action == 'LEFT':
