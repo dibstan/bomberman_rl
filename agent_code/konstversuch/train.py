@@ -14,16 +14,20 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.001    # learning rate
-GAMMA = 0.001     # discount rate
+GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
 VALID_ACTION = "VALID_ACTION"
 COIN_CHASER = "COIN_CHASER"
-MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
-WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
-INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
+MOVED_OUT_OF_DANGER = "MOVED_AWAY_FROM_EXPLODING_TILE"
+STAYED_NEAR_BOMB = 'STAYED_ON_EXPLODING_TILE'
+MOVED_INTO_DANGER = "MOVED_TOWARDS_EXPLODING"
+CRATE_CHASER = "GOES_TOWARDS_CRATE"
+BOMB_NEXT_TO_CRATE = "LAYS_BOMB_NEXT_TO_CRATE"
+BOMB_DESTROYED_NOTHING = "LAYED_BOMB_THAT_DIDNT_DESTROY_ANYTHING"
+#LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 
 
@@ -113,15 +117,20 @@ def reward_from_events(self, events: List[str]) -> int:
     '''
     game_rewards = {
         e.COIN_COLLECTED: 12,
-        e.KILLED_OPPONENT: 10,
-        e.KILLED_SELF: -20,
+        e.KILLED_OPPONENT: 5,
+        e.KILLED_SELF: -100,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
-        COIN_CHASER: 0.5,
         VALID_ACTION: -1,
-        MOVED_AWAY_FROM_BOMB: 1,
-        WAITED_IN_EXPLOSION_RANGE: -1,
-        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
+        COIN_CHASER: 0.5,
+        MOVED_OUT_OF_DANGER: 2,
+        MOVED_INTO_DANGER: -6,
+        STAYED_NEAR_BOMB: -5,
+        e.CRATE_DESTROYED: 4,
+        e.COIN_FOUND: 1,
+        BOMB_NEXT_TO_CRATE: 5,
+        CRATE_CHASER: 0.5,
+        BOMB_DESTROYED_NOTHING: -7 
     }
     reward_sum = 0
     for event in events:
@@ -149,7 +158,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
-    ############################################################################################################    
+ 
     #define event coin_chaser
     coin_coordinates = old_game_state['coins']
     if len(coin_coordinates) != 0:
@@ -161,7 +170,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
             events.append(COIN_CHASER)
 
     
-     #define events with bombs
+    #define events with bombs
     old_bomb_coors = old_game_state['bombs']
 
     dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
@@ -169,17 +178,47 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         for coor in self.exploding_tiles_map[bomb[0]]:
             dangerous_tiles.append(coor)
 
-    if dangerous_tiles != []:       
+    if len(dangerous_tiles) > 0:   
+        #moving out of dangerous tile    
         if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
-            events.append(MOVED_AWAY_FROM_BOMB)
-        if old_player_coor in dangerous_tiles and self_action == "WAIT":
-            #print('waited')
-            events.append(WAITED_IN_EXPLOSION_RANGE)
+            events.append(MOVED_OUT_OF_DANGER)
+        
+        #invalid action in dangerous tile
         if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
-            #print('invalid')
-            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
-    ######################################################################################################
+            events.append(STAYED_NEAR_BOMB)
+        
+        #moving into dangerous tiles
+        if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
+            events.append(MOVED_INTO_DANGER)
 
+    #define events with crates
+    field = old_game_state['field']
+    rows,cols = np.where(field == 1)
+    crates_position = np.array([rows,cols]).T   #crate coordinates in form [x,y]
+    old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
+    new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
+    if len(old_crate_distance) > 0 and len(new_crate_distance) > 0:
+        if min(new_crate_distance) < min(old_crate_distance):
+            events.append(CRATE_CHASER)
+
+    #define event for bomb next to crate
+        if self_action == 'BOMB':
+            if min(old_crate_distance) == 1:
+                events.append(BOMB_NEXT_TO_CRATE)
+
+    #if bombs destroyed nothing
+    if 'OWN_BOMB_EXPLODED' in events and 'CRATE_DESTROYED' not in events:
+        events.append(BOMB_DESTROYED_NOTHING)
+    
+    
+    '''explosion_map = game_state['explosion_map']
+    #define event where moving into smoke is penalized
+    if len(np.where(explosion_map != 0)[0]):
+        if explosion_map[old_game_state]
+    #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
+            if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
+                if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
+                    channels[i,5] = 1'''
 
 
 def n_step_TD(self, n):
@@ -198,6 +237,7 @@ def n_step_TD(self, n):
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
     transitions_array = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+    
     if transitions_array[0,1] is not None:
         # Updating the model
         if  np.shape(transitions_array)[0] == n:
@@ -228,7 +268,7 @@ def n_step_TD(self, n):
             
             self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
 
-            GRADIENT = first_state * np.clip((Q_TD - Q), -1,1)     # gradient descent
+            GRADIENT = first_state * np.clip((Q_TD - Q), -8,8)     # gradient descent
             
             self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
             #print(self.model)

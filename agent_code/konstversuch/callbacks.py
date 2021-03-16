@@ -49,7 +49,8 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 1.
+    if self.model == None: random_prob = 0
+    else: random_prob = 1
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -59,7 +60,15 @@ def act(self, game_state: dict) -> str:
         
         #print(move)
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
-
+    
+    #if we just want to play and not overwrite training data
+    if not self.train: 
+        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+        betas = np.array(list(self.model.values()))
+        feature_vector = np.array(state_to_features(game_state))
+        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        return move
+        
     self.logger.debug("Querying model for action.")
     return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
 
