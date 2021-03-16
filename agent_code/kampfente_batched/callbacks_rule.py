@@ -244,17 +244,20 @@ def state_to_features(game_state: dict) -> np.array:
     position_coins = np.array(game_state['coins'])
     #print('coins:', position_coins)
 
-    ################################################################################################################
+    #getting bomb position from state
     bomb_position = []
     for i in range(len(game_state['bombs'])):
         bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1]] )
     bomb_position = np.array(bomb_position)
+
+    #getting position of other players from state:
+    other_position = []
+    for i in range(len(game_state['others'])):
+        other_position.append([game_state['others'][i][3][0], game_state['others'][i][3][1]])
+    other_position = np.array(other_position)
     
-    #print('bomb_position', bomb_position)
-    #################################################################################################################
 
-
-    #positions of neigboring tiles in the order (Left, Right, Up, Down)
+    #positions of neigboring tiles in the order (UP, DOWN, LEFT, RIGHT)
     neighbor_pos = []
     neighbor_pos.append((player[0], player[1] - 1))
     neighbor_pos.append((player[0], player[1] + 1))
@@ -278,23 +281,39 @@ def state_to_features(game_state: dict) -> np.array:
         closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 1)
         priority_index = np.argsort(closest_neighbor)
 
+
+    # distance from others to player
+    if other_position.size > 0:
+        d_others = np.subtract(other_position, player)   
+        
+        dist_norm_others = np.linalg.norm(d_others, axis = 1)
+        index_closest = dist_norm_others.argmin()
+        closest_others = other_position[index_closest]
+        
+        
+        #find direction to go for closest coin:
+        d_others_neighbor = np.subtract(neighbor_pos, closest_others)
+        
+        #finding the direction that brings us closer the closest coin
+        closest_neighbor_other = np.linalg.norm(d_others_neighbor, axis = 1)
+        others_index = np.argsort(closest_neighbor_other)
+
     #creating channels for one-hot encoding
-    channels = np.zeros((4,6))
+    channels = np.zeros((4,8))
     
     #describing field of agent:
     player_tile = np.zeros(2) #... adjust to 3 when Danger feature is added
 
-###################################################################################################
+
     #searching for near bombs:
     
     if len(bomb_position) != 0:
-        bomb_distances = np.linalg.norm( np.subtract(bomb_position, player) , axis = 1)
+        bomb_distances = np.linalg.norm(np.subtract(bomb_position, player) , axis = 1)
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
    
 
     #get explosion map (remeber: explosions last for 2 steps)
     explosion_map = game_state['explosion_map']
-###################################################################################################
 
     #each direction is encoded by [wall, crate, coin, bomb, priority] ...danger value to come
 
@@ -315,7 +334,6 @@ def state_to_features(game_state: dict) -> np.array:
             if np.any(np.sum(np.abs(position_coins-neighbor_pos[i]), axis=1) == 0):
                 channels[i][2] = 1
 
-############################################################################################################
 
         #finding bomb:
         if len(bomb_position) != 0:
@@ -331,20 +349,23 @@ def state_to_features(game_state: dict) -> np.array:
             # are there dangerous tiles in the neighbors?
             bomb_tuples = [tuple(x) for x in bomb_position]
             #print(bomb_tuples)
+            
             for j in close_bomb_indices:                                                     #only look at close bombs
                 #if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
                 dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
                 if np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0):
                                                          #if neighbor is on dangerous tile -> set danger value
                     channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
-        
+
+                #if player on dangerous tile, add 1 to player tile danger index
+                if np.any(np.sum(np.abs(dangerous_tiles - player), axis=1) == 0):
+                    player_tile[0] = 1
 
             #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
             if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
                 if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
                     channels[i,5] = 1 
 
-#############################################################################################################
             
     
     #describing priority: 
@@ -353,17 +374,24 @@ def state_to_features(game_state: dict) -> np.array:
             if channels[priority_index[i]][0] != 1:
                 channels[priority_index[i]][4] = 1
                 break
+
+    if other_position.size > 0:
+        for i in range(len(others_index)):
+            if channels[others_index[i]][0] != 1:
+                channels[others_index[i]][6] = 1
+                
+                #does the player have a bomb?
+                if game_state['others'][index_closest][2]:
+                    channels[others_index[i]][7] = 1
+                break 
         
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
 
-    #player on coin?
-    if player in position_coins:
-        player_tile[0] = 1
 
     #player on bomb?
     if len(bomb_position)!=0:
-        if player in bomb_position:
+        if np.any(np.sum(np.abs(bomb_position- player), axis=1) == 0):
             player_tile[1] = 1
 
     #combining neighbor describtion with current tile describtion:

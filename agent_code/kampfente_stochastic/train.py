@@ -13,9 +13,11 @@ Transition = namedtuple('Transition',
 
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.001    # learning rate
-GAMMA = 0.5     # discount rate
+ALPHA = 0.01    # learning rate
+GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
+CLIP = 10   # initial clip value
+N_CLIPPER = 30      # number of fluctuations considering in auto clipping
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
@@ -50,6 +52,7 @@ def setup_training(self):
     self.fluctuations = []      # array for the fluctuations of each each round
     self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
     
+    self.clip = CLIP    # clip value
 
     
     
@@ -101,6 +104,12 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.fluctuations = []      # resetting the fluctuation array
     with open('fluctuations.pt', 'wb') as file:
         pickle.dump(self.max_fluctuations, file)
+
+    # updating the clip value
+    try:
+        self.clip = np.mean(self.max_fluctuations[-N_CLIPPER:])
+    except:
+        self.clip = CLIP
 
     # delete history cache
     self.transitions = deque(maxlen=N)
@@ -226,9 +235,9 @@ def n_step_TD(self, n):
 
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
-        self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
+        self.fluctuations.append(np.clip(abs(Q_TD-Q), -self.clip, self.clip))       # saving the fluctuation
 
-        GRADIENT = first_state * np.clip((Q_TD - Q), -10,10)     # gradient descent
+        GRADIENT = first_state * np.clip((Q_TD - Q), -self.clip,self.clip)     # gradient descent
         
         self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
         #print(self.model)
