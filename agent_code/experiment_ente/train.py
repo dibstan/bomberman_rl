@@ -22,7 +22,11 @@ WAITING_EVENT = "WAIT"
 VALID_ACTION = "VALID_ACTION"
 COIN_CHASER = "COIN_CHASER"
 MOVED_OUT_OF_DANGER = "MOVED_AWAY_FROM_EXPLODING_TILE"
+MOVED_INTO_DANGER = "MOVED_INTO_DANGER"
 STAYED_NEAR_BOMB = 'STAYED_ON_EXPLODING_TILE'
+CRATE_CHASER = 'CRATE_CHASER'
+BOMB_NEXT_TO_CRATE = 'BOMB_NEXT_TO_CRATE'
+BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
 #LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 
@@ -114,15 +118,19 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -30,
+        e.KILLED_SELF: -50,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
         VALID_ACTION: -1,
-        COIN_CHASER: 0.5,
-        MOVED_OUT_OF_DANGER: 1,
-        STAYED_NEAR_BOMB: 1,
-        e.CRATE_DESTROYED: 1,
-        e.COIN_FOUND: 1
+        COIN_CHASER: 2,
+        MOVED_OUT_OF_DANGER: 5,
+        STAYED_NEAR_BOMB: -5,
+        MOVED_INTO_DANGER: -5,
+        e.CRATE_DESTROYED: 2,
+        e.COIN_FOUND: 1,
+        CRATE_CHASER: 0.5,
+        BOMB_NEXT_TO_CRATE: 2,
+        BOMB_DESTROYED_NOTHING: -30
     }
     reward_sum = 0
     for event in events:
@@ -144,8 +152,6 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     if self_action == "WAIT":
         events.append(WAITING_EVENT)
     
-
-    # Getting closer to coins
     # get positions of the player
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
@@ -162,7 +168,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
             events.append(COIN_CHASER)
 
     
-     #define events with bombs
+    #define events with bombs
     old_bomb_coors = old_game_state['bombs']
 
     dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
@@ -175,7 +181,32 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
             events.append(MOVED_OUT_OF_DANGER)
         if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
             events.append(STAYED_NEAR_BOMB)
- 
+        if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
+            events.append(MOVED_INTO_DANGER)
+
+    #if bombs destroyed nothing
+    if 'BOMB_EXPLODED' in events:
+        if 'CRATE_DESTROYED' not in events:
+            events.append(BOMB_DESTROYED_NOTHING)
+    
+    #define events with crates
+    field = old_game_state['field']
+    rows,cols = np.where(field == 1)
+    crates_position = np.array([rows,cols]).T   #crate coordinates in form [x,y]
+    old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
+    new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
+
+    if old_crate_distance.size > 0:
+        if min(new_crate_distance) < min(old_crate_distance) and old_game_state['self'][2]:
+            #print('yes')
+            events.append(CRATE_CHASER)
+        
+        #define event for bomb next to crate
+        if self_action == 'BOMB':
+            if min(old_crate_distance) == 1:
+                #print('fuck')
+                events.append(BOMB_NEXT_TO_CRATE)
+
 
 
 
@@ -195,61 +226,62 @@ def n_step_TD(self, n):
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
     transitions_array = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+    if transitions_array[0,1] is not None:
+
+        # Updating the model
+        if  np.shape(transitions_array)[0] == n:
+            
+            action = transitions_array[0,1]     # relevant action executed
+
+            first_state = transitions_array[0,0]    # first state saved in the cache
+
+            last_state = transitions_array[-1,2]     # last state saved in the cache
+
+            n_future_rewards = transitions_array[:,3]   # rewards of the n next actions
+
+            discount = np.ones(n)*GAMMA   # discount for the i th future reward: GAMMA^i 
+            for i in range(0,n):
+                discount[i] = discount[i]**i
+
+            if last_state is not None:  # value estimate using n-step temporal difference
+                Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state) 
     
-    # Updating the model
-    if  np.shape(transitions_array)[0] == n:
-        
-        action = transitions_array[0,1]     # relevant action executed
+            else:
+                Q_TD = np.dot(discount, n_future_rewards)
+            
+            '''print(action)
+            print(n_future_rewards)
+            print(Q_TD)'''
 
-        first_state = transitions_array[0,0]    # first state saved in the cache
+            Q = np.dot(first_state, self.model[action])     # value estimate of current model
+            
+            self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
 
-        last_state = transitions_array[-1,2]     # last state saved in the cache
+            GRADIENT = first_state * np.clip((Q_TD - Q), -1,1)     # gradient descent
+            
+            self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
+            #print(self.model)
 
-        n_future_rewards = transitions_array[:,3]   # rewards of the n next actions
+            # Train with augmented data
+            #update with horizontally shifted state:
+            hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[hshift_action] = hshift_model_update
 
-        discount = np.ones(n)*GAMMA   # discount for the i th future reward: GAMMA^i 
-        for i in range(0,n):
-            discount[i] = discount[i]**i
+            #update with vertically shifted state:
+            vshift_model_update, vshift_action = feature_augmentation(self, vertical_shift, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[vshift_action] = vshift_model_update
 
-        if last_state is not None:  # value estimate using n-step temporal difference
-            Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state) 
-   
-        else:
-            Q_TD = np.dot(discount, n_future_rewards)
-        
-        '''print(action)
-        print(n_future_rewards)
-        print(Q_TD)'''
+            #update with turn left:
+            left_model_update, left_turn_action = feature_augmentation(self, turn_left, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[left_turn_action] = left_model_update
 
-        Q = np.dot(first_state, self.model[action])     # value estimate of current model
-        
-        self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
+            #update with turn right:
+            right_model_update, right_turn_action = feature_augmentation(self, turn_right, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[right_turn_action] = right_model_update
 
-        GRADIENT = first_state * np.clip((Q_TD - Q), -1,1)     # gradient descent
-        
-        self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
-        #print(self.model)
-
-        # Train with augmented data
-        #update with horizontally shifted state:
-        hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[hshift_action] = hshift_model_update
-
-        #update with vertically shifted state:
-        vshift_model_update, vshift_action = feature_augmentation(self, vertical_shift, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[vshift_action] = vshift_model_update
-
-        #update with turn left:
-        left_model_update, left_turn_action = feature_augmentation(self, turn_left, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[left_turn_action] = left_model_update
-
-        #update with turn right:
-        right_model_update, right_turn_action = feature_augmentation(self, turn_right, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[right_turn_action] = right_model_update
-
-        #update with turn around:
-        fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[fullturn_action] = fullturn_model_update
+            #update with turn around:
+            fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[fullturn_action] = fullturn_model_update
 
 
 
