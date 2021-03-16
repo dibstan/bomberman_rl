@@ -14,16 +14,16 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.001    # learning rate
-GAMMA = 0.2     # discount rate
+GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
 VALID_ACTION = "VALID_ACTION"
 COIN_CHASER = "COIN_CHASER"
-MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
-WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
-INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
+MOVED_OUT_OF_DANGER = "MOVED_AWAY_FROM_EXPLODING_TILE"
+STAYED_NEAR_BOMB = 'STAYED_ON_EXPLODING_TILE'
+#LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 
 
@@ -114,14 +114,15 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -20,
+        e.KILLED_SELF: -30,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
-        COIN_CHASER: 0.5,
         VALID_ACTION: -1,
-        MOVED_AWAY_FROM_BOMB: 1,
-        WAITED_IN_EXPLOSION_RANGE: -1,
-        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
+        COIN_CHASER: 0.5,
+        MOVED_OUT_OF_DANGER: 1,
+        STAYED_NEAR_BOMB: 1,
+        e.CRATE_DESTROYED: 1,
+        e.COIN_FOUND: 1
     }
     reward_sum = 0
     for event in events:
@@ -149,7 +150,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
-    ############################################################################################################    
+ 
     #define event coin_chaser
     coin_coordinates = old_game_state['coins']
     if len(coin_coordinates) != 0:
@@ -171,14 +172,10 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
 
     if dangerous_tiles != []:       
         if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
-            events.append(MOVED_AWAY_FROM_BOMB)
-        if old_player_coor in dangerous_tiles and self_action == "WAIT":
-            #print('waited')
-            events.append(WAITED_IN_EXPLOSION_RANGE)
+            events.append(MOVED_OUT_OF_DANGER)
         if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
-            #print('invalid')
-            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
-    ######################################################################################################
+            events.append(STAYED_NEAR_BOMB)
+ 
 
 
 
@@ -226,14 +223,14 @@ def n_step_TD(self, n):
 
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
-        self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
+        self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
 
-        GRADIENT = first_state * np.clip((Q_TD - Q), -10,10)     # gradient descent
+        GRADIENT = first_state * np.clip((Q_TD - Q), -1,1)     # gradient descent
         
         self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
         #print(self.model)
 
-        '''# Train with augmented data
+        # Train with augmented data
         #update with horizontally shifted state:
         hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
         self.model[hshift_action] = hshift_model_update
@@ -252,7 +249,7 @@ def n_step_TD(self, n):
 
         #update with turn around:
         fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[fullturn_action] = fullturn_model_update'''
+        self.model[fullturn_action] = fullturn_model_update
 
 
 
@@ -276,33 +273,13 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
 
 
 
-def vertical_shift(state, action):
-    #initializing the shifted state:
-    shifted_state = np.copy(state)
-
-    #shifting up to down:
-    shifted_state[12:18] = state[18:24]
-    shifted_state[18:24] = state[12:18]
-
-    #shifting actions
-    if action == "UP":
-        new_action = "DOWN"
-    
-    elif action == "DOWN":
-        new_action = "UP"
-
-    else:
-        new_action = action
-
-    return shifted_state, new_action
-
 def horizontal_shift(state, action):
     #initializing the shifted state:
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:6] = state[6:12]
-    shifted_state[6:12] = state[0:6]
+    shifted_state[16:24] = state[24:32]
+    shifted_state[24:32] = state[16:24]
 
     #shifting actions
     if action == "LEFT":
@@ -316,18 +293,69 @@ def horizontal_shift(state, action):
 
     return shifted_state, new_action
 
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[0:8] = state[8:16]
+    shifted_state[8:16] = state[0:8]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_right(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+    
+    #up -> left 
+    turned_state[0:8] = state[16:24]
+    #down -> right
+    turned_state[8:16] = state[24:32]
+    #right -> up
+    turned_state[16:24] = state[8:16]
+    #left -> down
+    turned_state[24:32] = state[0:8]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'UP'
+    
+    elif action == 'RIGHT':
+        new_action = 'DOWN'
+
+    elif action == 'DOWN':
+        new_action = 'LEFT'
+    
+    elif action == 'UP':
+        new_action = 'RIGHT'
+
+    else:
+        new_action = action
+    
+    return turned_state, new_action
+
 def turn_left(state, action):
     #initializing the turned state:
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:6] = state[12:18]
+    turned_state[0:8] = state[24:32]
     #down -> right
-    turned_state[6:12] = state[18:24]
+    turned_state[8:16] = state[16:24]
     #right -> up
-    turned_state[12:18] = state[6:12]
+    turned_state[16:24] = state[0:8]
     #left -> down
-    turned_state[18:24] = state[0:6]
+    turned_state[24:32] = state[8:16]
 
     #shifting actions
     if action == 'LEFT':
@@ -341,37 +369,6 @@ def turn_left(state, action):
     
     elif action == 'UP':
         new_action = 'LEFT'
-
-    else:
-        new_action = action
-
-    return turned_state, new_action
-
-def turn_right(state, action):
-    #initializing the turned state:
-    turned_state = np.copy(state)
-
-    #up -> left 
-    turned_state[0:6] = state[18:24]
-    #down -> right
-    turned_state[6:12] = state[12:18]
-    #right -> up
-    turned_state[12:18] = state[0:6]
-    #left -> down
-    turned_state[18:24] = state[6:12]
-
-    #shifting actions
-    if action == 'LEFT':
-        new_action = 'UP'
-    
-    elif action == 'RIGHT':
-        new_action = 'DOWN'
-
-    elif action == 'DOWN':
-        new_action = 'LEFT'
-    
-    elif action == 'UP':
-        new_action = 'RIGHT'
 
     else:
         new_action = action
