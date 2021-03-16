@@ -14,7 +14,7 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.001    # learning rate
-GAMMA = 0.5     # discount rate
+GAMMA = 0.2     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
