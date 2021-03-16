@@ -118,19 +118,19 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -100,
+        e.KILLED_SELF: -150,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
         VALID_ACTION: -1,
         COIN_CHASER: 0.5,
-        MOVED_OUT_OF_DANGER: 2,
+        MOVED_OUT_OF_DANGER: 3,
         MOVED_INTO_DANGER: -6,
         STAYED_NEAR_BOMB: -5,
-        e.CRATE_DESTROYED: 4,
+        e.CRATE_DESTROYED: 5,
         e.COIN_FOUND: 1,
         BOMB_NEXT_TO_CRATE: 5,
-        CRATE_CHASER: 0.5,
-        BOMB_DESTROYED_NOTHING: -7 
+        CRATE_CHASER: 0.6,
+        BOMB_DESTROYED_NOTHING: -6 
     }
     reward_sum = 0
     for event in events:
@@ -184,12 +184,13 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
             events.append(MOVED_OUT_OF_DANGER)
         
         #invalid action in dangerous tile
-        if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
             events.append(STAYED_NEAR_BOMB)
         
         #moving into dangerous tiles
         if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
             events.append(MOVED_INTO_DANGER)
+
 
     #define events with crates
     field = old_game_state['field']
@@ -198,7 +199,8 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
     new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
     if len(old_crate_distance) > 0 and len(new_crate_distance) > 0:
-        if min(new_crate_distance) < min(old_crate_distance):
+        if min(new_crate_distance) < min(old_crate_distance) and old_game_state['self'][2]:
+            
             events.append(CRATE_CHASER)
 
     #define event for bomb next to crate
