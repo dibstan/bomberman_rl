@@ -113,7 +113,7 @@ def reward_from_events(self, events: List[str]) -> int:
     '''
     game_rewards = {
         e.COIN_COLLECTED: 12,
-        e.KILLED_OPPONENT: 5,
+        e.KILLED_OPPONENT: 10,
         e.KILLED_SELF: -20,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
@@ -198,61 +198,61 @@ def n_step_TD(self, n):
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
     transitions_array = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+    if transitions_array[0,1] is not None:
+        # Updating the model
+        if  np.shape(transitions_array)[0] == n:
+            
+            action = transitions_array[0,1]     # relevant action executed
+
+            first_state = transitions_array[0,0]    # first state saved in the cache
+
+            last_state = transitions_array[-1,2]     # last state saved in the cache
+
+            n_future_rewards = transitions_array[:,3]   # rewards of the n next actions
+
+            discount = np.ones(n)*GAMMA   # discount for the i th future reward: GAMMA^i 
+            for i in range(0,n):
+                discount[i] = discount[i]**i
+
+            if last_state is not None:  # value estimate using n-step temporal difference
+                Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state) 
     
-    # Updating the model
-    if  np.shape(transitions_array)[0] == n:
-        
-        action = transitions_array[0,1]     # relevant action executed
+            else:
+                Q_TD = np.dot(discount, n_future_rewards)
+            
+            '''print(action)
+            print(n_future_rewards)
+            print(Q_TD)'''
 
-        first_state = transitions_array[0,0]    # first state saved in the cache
+            Q = np.dot(first_state, self.model[action])     # value estimate of current model
+            
+            self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
 
-        last_state = transitions_array[-1,2]     # last state saved in the cache
+            GRADIENT = first_state * np.clip((Q_TD - Q), -1,1)     # gradient descent
+            
+            self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
+            #print(self.model)
 
-        n_future_rewards = transitions_array[:,3]   # rewards of the n next actions
+            # Train with augmented data
+            #update with horizontally shifted state:
+            hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[hshift_action] = hshift_model_update
 
-        discount = np.ones(n)*GAMMA   # discount for the i th future reward: GAMMA^i 
-        for i in range(0,n):
-            discount[i] = discount[i]**i
+            #update with vertically shifted state:
+            vshift_model_update, vshift_action = feature_augmentation(self, vertical_shift, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[vshift_action] = vshift_model_update
 
-        if last_state is not None:  # value estimate using n-step temporal difference
-            Q_TD = np.dot(discount, n_future_rewards) + GAMMA**(n+1) * Q_func(self, last_state) 
-   
-        else:
-            Q_TD = np.dot(discount, n_future_rewards)
-        
-        '''print(action)
-        print(n_future_rewards)
-        print(Q_TD)'''
+            #update with turn left:
+            left_model_update, left_turn_action = feature_augmentation(self, turn_left, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[left_turn_action] = left_model_update
 
-        Q = np.dot(first_state, self.model[action])     # value estimate of current model
-        
-        self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
+            #update with turn right:
+            right_model_update, right_turn_action = feature_augmentation(self, turn_right, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[right_turn_action] = right_model_update
 
-        GRADIENT = first_state * np.clip((Q_TD - Q), -1,1)     # gradient descent
-        
-        self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
-        #print(self.model)
-
-        # Train with augmented data
-        #update with horizontally shifted state:
-        hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[hshift_action] = hshift_model_update
-
-        #update with vertically shifted state:
-        vshift_model_update, vshift_action = feature_augmentation(self, vertical_shift, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[vshift_action] = vshift_model_update
-
-        #update with turn left:
-        left_model_update, left_turn_action = feature_augmentation(self, turn_left, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[left_turn_action] = left_model_update
-
-        #update with turn right:
-        right_model_update, right_turn_action = feature_augmentation(self, turn_right, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[right_turn_action] = right_model_update
-
-        #update with turn around:
-        fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[fullturn_action] = fullturn_model_update
+            #update with turn around:
+            fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
+            self.model[fullturn_action] = fullturn_model_update
 
 
 
@@ -281,8 +281,8 @@ def horizontal_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[12:18] = state[18:24]
-    shifted_state[18:24] = state[12:18]
+    shifted_state[16:24] = state[24:32]
+    shifted_state[24:32] = state[16:24]
 
     #shifting actions
     if action == "LEFT":
@@ -301,8 +301,8 @@ def vertical_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:6] = state[6:12]
-    shifted_state[6:12] = state[0:6]
+    shifted_state[0:8] = state[8:16]
+    shifted_state[8:16] = state[0:8]
 
     #shifting actions
     if action == "UP":
@@ -321,13 +321,13 @@ def turn_right(state, action):
     turned_state = np.copy(state)
     
     #up -> left 
-    turned_state[0:6] = state[12:18]
+    turned_state[0:8] = state[16:24]
     #down -> right
-    turned_state[6:12] = state[18:24]
+    turned_state[8:16] = state[24:32]
     #right -> up
-    turned_state[12:18] = state[6:12]
+    turned_state[16:24] = state[8:16]
     #left -> down
-    turned_state[18:24] = state[0:6]
+    turned_state[24:32] = state[0:8]
 
     #shifting actions
     if action == 'LEFT':
@@ -352,13 +352,13 @@ def turn_left(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:6] = state[18:24]
+    turned_state[0:8] = state[24:32]
     #down -> right
-    turned_state[6:12] = state[12:18]
+    turned_state[8:16] = state[16:24]
     #right -> up
-    turned_state[12:18] = state[0:6]
+    turned_state[16:24] = state[0:8]
     #left -> down
-    turned_state[18:24] = state[6:12]
+    turned_state[24:32] = state[8:16]
 
     #shifting actions
     if action == 'LEFT':
