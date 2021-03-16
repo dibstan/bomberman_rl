@@ -12,16 +12,22 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 # Hyperparameters
-HIST_SIZE = 100
+HIST_SIZE = 1000
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.001    # learning rate
-GAMMA = 0.2     # discount rate
+ALPHA = 0.1    # learning rate
+GAMMA = 0.001     # discount rate
 N = 4   # N step temporal difference
+CLIP = 10   # initial clip value
+N_CLIPPER = 10      # number of fluctuations considering in auto clipping
+
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
-COIN_CHASER = "CLOSER_TO_COIN"
 VALID_ACTION = "VALID_ACTION"
+COIN_CHASER = "COIN_CHASER"
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
+INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 
 
@@ -41,9 +47,16 @@ def setup_training(self):
             self.model = pickle.load(file)
     except:
         self.model = None
+
+    with open('explosion_map.pt', 'rb') as file:
+        self.exploding_tiles_map = pickle.load(file)
+    
+    self.fluctuations = []      # array for the fluctuations of each each round
+    
+    self.clip = CLIP    # clip value
     
     
- 
+
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
     :param self: This object is passed to all callbacks and you can set arbitrary values.
@@ -57,7 +70,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         # Adding auxillary Events
         aux_events(self, old_game_state, self_action, new_game_state, events)
         #print(events, reward_from_events(self,events))
-      
+
+
         # Adding the last move to the transition cache
         self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
 
@@ -82,6 +96,20 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
 
+    # Store the fluctuations
+    with open('fluctuations.pt', 'wb') as file:
+        pickle.dump(self.fluctuations, file)
+    
+    # updating the clip value
+    try:
+        self.clip = np.mean(self.fluctuations[-N_CLIPPER:])
+    except:
+        self.clip = CLIP
+    
+
+    # delete history cache
+    self.transitions = deque(maxlen=HIST_SIZE)
+
 
 def reward_from_events(self, events: List[str]) -> int:
     '''
@@ -89,13 +117,16 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 10,
+        e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -20,
-        WAITING_EVENT: -7,
+        WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
-        COIN_CHASER: 7,
-        VALID_ACTION: -1
+        COIN_CHASER: 0.5,
+        VALID_ACTION: -1,
+        MOVED_AWAY_FROM_BOMB: 1,
+        WAITED_IN_EXPLOSION_RANGE: -1,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
     }
     reward_sum = 0
     for event in events:
@@ -118,18 +149,41 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         events.append(WAITING_EVENT)
     
 
-    # getting closer to coins
+    # Getting closer to coins
     # get positions of the player
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
+    ############################################################################################################    
     #define event coin_chaser
     coin_coordinates = old_game_state['coins']
-    old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
-    new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+    if len(coin_coordinates) != 0:
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+
     
-    if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-        events.append(COIN_CHASER)
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
+
+    
+     #define events with bombs
+    old_bomb_coors = old_game_state['bombs']
+
+    dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:
+            dangerous_tiles.append(coor)
+
+    if dangerous_tiles != []:       
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_AWAY_FROM_BOMB)
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
+            #print('waited')
+            events.append(WAITED_IN_EXPLOSION_RANGE)
+        if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+            #print('invalid')
+            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
+    ######################################################################################################
 
 
 
@@ -141,80 +195,224 @@ def n_step_TD(self, n):
     
     #setting up model if necessary
     D = len(self.transitions[0].state)      # feature dimension
-
+    
     if self.model == None:
         init_beta = np.zeros(D)
         self.model = {'UP': init_beta, 
         'RIGHT': init_beta, 'DOWN': init_beta,
         'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
-    transitions_array = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+    total_batch = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
+    total_batch[-1,2] = np.zeros(D)
+    
+    
+    total_batch_size = np.shape(total_batch)[0]
+    effective_batch_size = total_batch_size - n 
 
-    total_batch_size = np.shape(transitions_array)[0]
-    effective_batch_size = total_batch_size - n
+    effective_batch = total_batch[:effective_batch_size]    # training instances that have n next instances
 
     # Creating the batches
     B = {'UP':{}, 'RIGHT':{}, 'DOWN':{},'LEFT':{}, 'WAIT':{}, 'BOMB':{}}
     actions = list(B.keys())
-    
+
+    fluctuations = []   # Array for the fluctuations in each action
+
     for action in actions:
-        # Adding the states to the sub-batches
-        features = transitions_array[:,0][np.where(transitions_array[:effective_batch_size+1,1] == action)]
+        # Finding indices for the wanted instances
+        index = np.where(effective_batch[:,1] == action)[0]     # indices of instances with action in subbatch
+        n_next_index = index[:, None] + np.arange(n+1)    # indices of the n next instances for every instance in this subbatch
+        nth_next_index = index + n      # indices of the nth next instance following the instances in the subbatch
 
-        try:    # features of old state
-            B[action]['features'] = np.stack(features)
-
-        except ValueError: 
-            B[action]['features'] = np.array([])
-
-
-        # Adding the n-next rewards to the subbatches
-        n_next_instances = np.where(transitions_array[:effective_batch_size+1,1] == action)[0][:, None] + np.arange(n)    # matrix holding the indices for the n next transitions for each transition in the action sub-batch
-        try:    # reward of action in transition
-            B[action]['rewards'] = np.stack(transitions_array[:,3][n_next_instances])
-
+        # computing the arrays according to above indices
+        try:
+            states = np.stack(total_batch[:,0][index])
         except ValueError:
-            B[action]['rewards'] = np.array([])
-
-
-        # Adding the n-th new state to the sub batches
-        nth_next_instance = np.where(transitions_array[:effective_batch_size+1,1] == action)[0] + (n-1)
-        nth_states = transitions_array[:,2][nth_next_instance]
-        print(nth_states)
-        print(np.isin([None], nth_states))
-        if np.shape(np.where(nth_states == None)[0])[0] != 0:
-            print('hey')
-        if len(nth_states) != 0:
-            B[action]['nth_states'] = np.stack(transitions_array[:,2][nth_next_instance])
-        else:
-            B[action]['nth_states'] = np.array([])
+            states = np.array([])
         
-        print(np.shape(B[action]['rewards']), np.shape(B[action]['nth_states']), B[action]['nth_states'])
+        try:
+            rewards = np.stack(total_batch[:,3][n_next_index])
+        except ValueError:
+            rewards = np.array([])
 
+        try:
+            nth_states = np.stack(total_batch[:,2][nth_next_index])
+        except ValueError:
+            nth_states = np.array([])
 
-    '''# Updating the model
-    if  np.shape(transitions_array)[0] == n:
+       
+        # updating the model
+        N = np.shape(rewards)[0]    # size of subbatch
 
-        action = transitions_array[0,1]     # relevant action executed
+        discount = np.ones(n+1)*GAMMA   # discount for the i th future reward: GAMMA^i 
+        for i in range(0,n+1):
+            discount[i] = discount[i]**i
 
-        first_state = transitions_array[0,0]    # first state saved in the cache
-
-        last_state = transitions_array[-1,0]     # last state saved in the cache
-
-        n_future_rewards = transitions_array[:-1,3]   # rewards of the n-1 next actions
-
-        discount = np.ones(n-1)*GAMMA   # discount for the i th future reward: GAMMA^i 
-        for i in range(1,n):
-            discount[i-1] = discount[i-1]**i
-
-        Q_TD = np.dot(discount, n_future_rewards) + GAMMA**n * Q_func(self, last_state)   # value estimate using n-step temporal difference
         
-        Q = np.dot(first_state, self.model[action])     # value estimate of current model
+        if N != 0:
+            self.model[action] = update_model(self, states, discount, rewards, nth_states, action, n, fluctuations)
 
-        GRADIENT = first_state * (Q_TD - Q)     # gradient descent
-        
-        self.model[action] = self.model[action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
-        #print(self.model)'''
+            # Train with augmented data
+            feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations)
+            
+    # saving the fluctuations
+    self.fluctuations.append(np.max(fluctuations))
+
+    
+    
+
+def update_model(self, states, discount, rewards, nth_states, action, n, fluctuations):
+    
+    Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
+    
+    Q = np.dot(states,self.model[action])   # Array holding the predicted Q-value for each instance in subbatch
+    
+    fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-self.clip,self.clip))))
+    
+    GRADIENT = np.dot(states.T, np.clip((Q_TD-Q), -self.clip,self.clip))   # gradient descent
+    
+    return self.model[action] + (ALPHA / N) * GRADIENT    #updating the model
+
+
+
+def feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations):
+    #update with horizontally shifted state:
+    hshift_states, hshift_action = horizontal_shift(states, action)
+    hshift_nth_states, hshift_action = horizontal_shift(nth_states, action)
+    self.model[hshift_action] = update_model(self, hshift_states, discount, rewards, hshift_nth_states, hshift_action, n, fluctuations)
+
+    #update with vertically shifted state:
+    vshift_states, vshift_action = vertical_shift(states, action)
+    vshift_nth_states, vshift_action = vertical_shift(nth_states, action)
+    self.model[vshift_action] = update_model(self, vshift_states, discount, rewards, vshift_nth_states, vshift_action, n, fluctuations)
+
+    #update with turn left:
+    rturn_states, rturn_action = turn_right(states, action)
+    rturn_nth_states, rturn_action = turn_right(nth_states, action)
+    self.model[rturn_action] = update_model(self, rturn_states, discount, rewards, rturn_nth_states, rturn_action, n, fluctuations)
+
+    #update with turn right:
+    lturn_states, lturn_action = turn_left(states, action)
+    lturn_nth_states, lturn_action = turn_left(nth_states, action)
+    self.model[lturn_action] = update_model(self, lturn_states, discount, rewards, lturn_nth_states, lturn_action, n, fluctuations)
+
+    #update with turn around:
+    fturn_states, fturn_action = turn_around(states, action)
+    fturn_nth_states, fturn_action = turn_around(nth_states, action)
+    self.model[fturn_action] = update_model(self, fturn_states, discount, rewards, fturn_nth_states, fturn_action, n, fluctuations)
+
+
+
+def horizontal_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[:,16:24] = state[:,24:32]
+    shifted_state[:,24:32] = state[:,16:24]
+
+    #shifting actions
+    if action == "LEFT":
+        new_action = "RIGHT"
+    
+    elif action == "RIGHT":
+        new_action = "LEFT"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[:,0:8] = state[:,8:16]
+    shifted_state[:,8:16] = state[:,0:8]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_right(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+    
+    #up -> left 
+    turned_state[:,0:8] = state[:,16:24]
+    #down -> right
+    turned_state[:,8:16] = state[:,24:32]
+    #right -> up
+    turned_state[:,16:24] = state[:,8:16]
+    #left -> down
+    turned_state[:,24:32] = state[:,0:8]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'UP'
+    
+    elif action == 'RIGHT':
+        new_action = 'DOWN'
+
+    elif action == 'DOWN':
+        new_action = 'LEFT'
+    
+    elif action == 'UP':
+        new_action = 'RIGHT'
+
+    else:
+        new_action = action
+    
+    return turned_state, new_action
+
+def turn_left(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+
+    #up -> left 
+    turned_state[:,0:8] = state[:,24:32]
+    #down -> right
+    turned_state[:,8:16] = state[:,16:24]
+    #right -> up
+    turned_state[:,16:24] = state[:,0:8]
+    #left -> down
+    turned_state[:,24:32] = state[:,8:16]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'DOWN'
+    
+    elif action == 'RIGHT':
+        new_action = 'UP'
+
+    elif action == 'DOWN':
+        new_action = 'RIGHT'
+    
+    elif action == 'UP':
+        new_action = 'LEFT'
+
+    else:
+        new_action = action
+
+    return turned_state, new_action
+
+def turn_around(state, action):
+    #first turn:
+    turn1, action1 = turn_left(state, action)
+
+    #second turn:
+    turn2, action2 = turn_left(turn1, action1)
+
+    return turn2, action2
+
 
 
 
@@ -223,7 +421,7 @@ def Q_func(self, state):
         input: self, state
         output: Q value of the best action
     '''
-
     vec_model = np.array(list(self.model.values()))     # vectorizing the model dict
-    
-    return np.max(np.dot(vec_model, state))      # return the max Q value
+    Q_pred = np.dot(vec_model,state.T)
+    Q_max = np.max(Q_pred, axis = 0)
+    return Q_max      # return the max Q value

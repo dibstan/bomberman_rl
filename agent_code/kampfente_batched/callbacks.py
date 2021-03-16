@@ -33,10 +33,13 @@ def setup(self):
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
 
-    # This code needs to be executed when PCA has already done for feature reduction.
-    with open("PCA.pt", "rb") as file:
-        self.pca = pickle.load(file)
-    
+    ##############################################################################################       
+    global exploding_tiles_map
+    with open('explosion_map.pt', 'rb') as file:
+        exploding_tiles_map = pickle.load(file)
+    ##############################################################################################
+
+
 
 def act(self, game_state: dict) -> str:
     """
@@ -46,7 +49,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 0.8
+    random_prob = 0.
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -55,11 +58,16 @@ def act(self, game_state: dict) -> str:
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
         #print(move)
-        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
-
+        return move 
+    if not self.train:
+        betas = np.array(list(self.model.values()))
+        feature_vector = np.array(state_to_features(game_state))
+        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        
+        #print(move)
+        return move 
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,0.1])
-
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
 
 def state_to_features(game_state: dict) -> np.array:
     """
@@ -76,81 +84,184 @@ def state_to_features(game_state: dict) -> np.array:
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """
+
     if game_state is None:
         return None
     
-    channels = []
+    #get player position:
+    player = np.array(game_state['self'][3])
     
-    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field
+    #converting positions of coins and bombs
+    position_coins = np.array(game_state['coins'])
+    #print('coins:', position_coins)
 
-    position_self = np.array(game_state['self'][3])     # position of player self
+    #getting bomb position from state
+    bomb_position = []
+    for i in range(len(game_state['bombs'])):
+        bomb_position.append([game_state['bombs'][i][0][0], game_state['bombs'][i][0][1]] )
+    bomb_position = np.array(bomb_position)
 
+    #getting position of other players from state:
+    other_position = []
+    for i in range(len(game_state['others'])):
+        other_position.append([game_state['others'][i][3][0], game_state['others'][i][3][1]])
+    other_position = np.array(other_position)
+    
 
-    # COINS
-    position_coins = np.array(game_state['coins'])      # position of the coins
+    #positions of neigboring tiles in the order (UP, DOWN, LEFT, RIGHT)
+    neighbor_pos = []
+    neighbor_pos.append((player[0], player[1] - 1))
+    neighbor_pos.append((player[0], player[1] + 1))
+    neighbor_pos.append((player[0] - 1, player[1]))
+    neighbor_pos.append((player[0] + 1, player[1]))
+    neighbor_pos = np.array(neighbor_pos)
+    
+    # distance from coins to player
+    if position_coins.size > 0:
+        d_coins = np.subtract(position_coins, player)   
         
-    d_coins = position_coins - position_self   # distance from coins to player
+        dist_norm = np.linalg.norm(d_coins, axis = 1)
+        
+        closest_coin = position_coins[dist_norm.argmin()]
+        
+        
+        #find direction to go for closest coin:
+        d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
+        
+        #finding the direction that brings us closer the closest coin
+        closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 1)
+        priority_index = np.argsort(closest_neighbor)
 
-    for i in range(9):
-        if i < len(d_coins):
-            channels.append(d_coins[i])
-        else:
-            channels.append([0,0])
 
-    # SELF    
-    channels.append(position_self)
+    # distance from others to player
+    if other_position.size > 0:
+        d_others = np.subtract(other_position, player)   
+        
+        dist_norm_others = np.linalg.norm(d_others, axis = 1)
+        index_closest = dist_norm_others.argmin()
+        closest_others = other_position[index_closest]
+        
+        
+        #find direction to go for closest coin:
+        d_others_neighbor = np.subtract(neighbor_pos, closest_others)
+        
+        #finding the direction that brings us closer the closest coin
+        closest_neighbor_other = np.linalg.norm(d_others_neighbor, axis = 1)
+        others_index = np.argsort(closest_neighbor_other)
 
-    # concatenate them as a feature tensor (they must have the same shape), ...
+    #creating channels for one-hot encoding
+    channels = np.zeros((4,8))
+    
+    #describing field of agent:
+    player_tile = np.zeros(2) #... adjust to 3 when Danger feature is added
+
+
+    #searching for near bombs:
+    
+    if len(bomb_position) != 0:
+        bomb_distances = np.linalg.norm(np.subtract(bomb_position, player) , axis = 1)
+        close_bomb_indices = np.where(bomb_distances <= 4)[0]
+   
+
+    #get explosion map (remeber: explosions last for 2 steps)
+    explosion_map = game_state['explosion_map']
+
+    #each direction is encoded by [wall, crate, coin, bomb, priority] ...danger value to come
+
+    for i in range(np.shape(neighbor_pos)[0]):
+        
+        #finding a wall:
+        field_value = game_state['field'][neighbor_pos[i][0]][neighbor_pos[i][1]] 
+
+        if field_value == -1:
+            channels[i][0] = 1
+        
+        #finding crate
+        if field_value == 1:
+            channels[i][1] = 1
+
+        #finding coin:
+        if position_coins.size > 0:
+            if np.any(np.sum(np.abs(position_coins-neighbor_pos[i]), axis=1) == 0):
+                channels[i][2] = 1
+
+
+        #finding bomb:
+        if len(bomb_position) != 0:
+            
+            #bomb on neighbor?
+            if np.any(np.sum(np.abs(bomb_position-neighbor_pos[i]), axis=1) == 0):
+                channels[i][3] = 1
+
+            #bomb on player position?
+            if player in bomb_position:
+                player_tile[1] = 1
+            
+            # are there dangerous tiles in the neighbors?
+            bomb_tuples = [tuple(x) for x in bomb_position]
+            #print(bomb_tuples)
+            
+            for j in close_bomb_indices:                                                     #only look at close bombs
+                #if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
+                dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
+                if np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0):
+                                                         #if neighbor is on dangerous tile -> set danger value
+                    channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
+
+                #if player on dangerous tile, add 1 to player tile danger index
+                if np.any(np.sum(np.abs(dangerous_tiles - player), axis=1) == 0):
+                    player_tile[0] = 1
+
+            #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
+            if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
+                if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
+                    channels[i,5] = 1 
+
+            
+    
+    #describing priority: 
+    if position_coins.size > 0:
+        for i in range(len(priority_index)):
+            if channels[priority_index[i]][0] != 1:
+                channels[priority_index[i]][4] = 1
+                break
+
+    if other_position.size > 0:
+        for i in range(len(others_index)):
+            if channels[others_index[i]][0] != 1:
+                channels[others_index[i]][6] = 1
+                
+                #does the player have a bomb?
+                if game_state['others'][index_closest][2]:
+                    channels[others_index[i]][7] = 1
+                break 
+        
+    #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
-    # and return them as a vector
+
+
+    #player on bomb?
+    if len(bomb_position)!=0:
+        if np.any(np.sum(np.abs(bomb_position- player), axis=1) == 0):
+            player_tile[1] = 1
+
+    #combining neighbor describtion with current tile describtion:
+    stacked_channels = np.concatenate((stacked_channels, player_tile))
+
     
-    return stacked_channels.reshape(-1)
+    #does our player have a bomb?
+    player_bomb = []
+    if game_state['self'][2]:
+        player_bomb.append(1)
+    else:
+        player_bomb.append(0)
 
-'''def state_to_features(game_state: dict) -> np.array:
-    """
-    *This is not a required function, but an idea to structure your code.*
-
-
-    Converts the game state to the input of your model, i.e.
-    a feature vector.
-
-    You can find out about the state of the game environment via game_state,
-    which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
-    what it contains.
-
-    :param game_state:  A dictionary describing the current game board.
-    :return: np.array
-    """
-    # This is the dict before the game begins and after it ends
-
-    if game_state is None:
-        return None
-    # For example, you could construct several channels of equal shape, ...
-    channels = []
-    coordinates = np.array(list(product(np.arange(0,17),np.arange(0,17))))  # generating a list holding all possible coordinates of the field 
-    channels.append([game_state['self'][1], int(game_state['self'][2] == True), game_state['self'][3][0], game_state['self'][3][1], game_state['round'], 0])#, game_state['step']])
-    for xy in coordinates:
-        field_state = game_state['field'][xy[0]][xy[1]]
-        explosion_state = game_state['explosion_map'][xy[0]][xy[1]]
-        bomb_countdown = -1
-        for bomb in game_state['bombs']:
-            if (xy[0],xy[1]) in bomb:
-                bomb_countdown = bomb[1]
-        coin_state = 0
-        for coin in game_state['coins']:
-            if (xy[0],xy[1]) == coin:
-                coin = 1
-        other_state = 0
-        other_bomb = 0
-        for other in game_state['others']:
-            if (xy[0],xy[1]) == other[3]:
-                other_state = 1
-                other_score = other[1]
-                other_bomb = int(other[2] == True)
-        channels.append([field_state, explosion_state, bomb_countdown, coin_state, other_state, other_bomb])
+    #combining and returning state_vector:
+    stacked_channels = np.concatenate((stacked_channels, player_bomb))
     
-    # concatenate them as a feature tensor (they must have the same shape), ...
-    stacked_channels = np.stack(channels).reshape(-1)
-    # and return them as a vector
-    
-    return stacked_channels #stacked_channels.reshape(-1)'''
+
+    #print(stacked_channels)
+    return stacked_channels
+
+
+ 
