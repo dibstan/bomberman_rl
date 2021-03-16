@@ -15,8 +15,8 @@ Transition = namedtuple('Transition',
 HIST_SIZE = 1000
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.1    # learning rate
-GAMMA = 0.001     # discount rate
-N = 5   # N step temporal difference
+GAMMA = 0.1     # discount rate
+N = 4   # N step temporal difference
 
 
 # Auxillary events
@@ -49,8 +49,8 @@ def setup_training(self):
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
     
-    '''self.fluctuations = []      # array for the fluctuations of each each round
-    self.max_fluctuations = []      # array for the maximum fluctuations in all rounds'''
+    self.fluctuations = []      # array for the fluctuations of each each round
+    
     
 
     
@@ -95,15 +95,14 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
 
-    '''# Store the fluctuations
-    self.max_fluctuations.append(np.max(self.fluctuations))     # saving the maximum fluctuation of round
-    self.fluctuations = []      # resetting the fluctuation array
+    # Store the fluctuations
     with open('fluctuations.pt', 'wb') as file:
-        pickle.dump(self.max_fluctuations, file)'''
+        pickle.dump(self.fluctuations, file)
+    
 
 
     # delete history cache
-    self.transitions = deque(maxlen=N)
+    self.transitions = deque(maxlen=HIST_SIZE)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -202,18 +201,20 @@ def n_step_TD(self, n):
     
     
     total_batch_size = np.shape(total_batch)[0]
-    effective_batch_size = total_batch_size - n
+    effective_batch_size = total_batch_size - n 
 
     effective_batch = total_batch[:effective_batch_size]    # training instances that have n next instances
 
     # Creating the batches
     B = {'UP':{}, 'RIGHT':{}, 'DOWN':{},'LEFT':{}, 'WAIT':{}, 'BOMB':{}}
     actions = list(B.keys())
-    
+
+    fluctuations = []   # Array for the fluctuations in each action
+
     for action in actions:
         # Finding indices for the wanted instances
         index = np.where(effective_batch[:,1] == action)[0]     # indices of instances with action in subbatch
-        n_next_index = index[:, None] + np.arange(n)    # indices of the n next instances for every instance in this subbatch
+        n_next_index = index[:, None] + np.arange(n+1)    # indices of the n next instances for every instance in this subbatch
         nth_next_index = index + n      # indices of the nth next instance following the instances in the subbatch
 
         # computing the arrays according to above indices
@@ -236,8 +237,8 @@ def n_step_TD(self, n):
         # updating the model
         N = np.shape(rewards)[0]    # size of subbatch
 
-        discount = np.ones(n)*GAMMA   # discount for the i th future reward: GAMMA^i 
-        for i in range(0,n):
+        discount = np.ones(n+1)*GAMMA   # discount for the i th future reward: GAMMA^i 
+        for i in range(0,n+1):
             discount[i] = discount[i]**i
         
         if N != 0: 
@@ -245,12 +246,13 @@ def n_step_TD(self, n):
             
             Q = np.dot(states,self.model[action])   # Array holding the prdicted Q-value for each instance in subbatch
             
-            '''self.fluctuations.append(np.abs(Q_TD-Q))'''
-
+            fluctuations.append(np.abs(np.mean(Q_TD-Q)))
+           
             GRADIENT = np.dot(states.T, (Q_TD-Q))   # gradient descent
             
             self.model[action] = self.model[action] + (ALPHA / N) * GRADIENT    #updating the model
 
+    self.fluctuations.append(np.max(fluctuations))
 
 def Q_func(self, state):
     '''
