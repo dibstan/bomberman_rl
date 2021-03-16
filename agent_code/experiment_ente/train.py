@@ -189,7 +189,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         if 'CRATE_DESTROYED' not in events:
             events.append(BOMB_DESTROYED_NOTHING)
     
-    #define events with crates
+    #define crate chaser
     field = old_game_state['field']
     rows,cols = np.where(field == 1)
     crates_position = np.array([rows,cols]).T   #crate coordinates in form [x,y]
