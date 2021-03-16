@@ -14,7 +14,7 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.001    # learning rate
-GAMMA = 0.5     # discount rate
+GAMMA = 0.2     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
@@ -226,14 +226,14 @@ def n_step_TD(self, n):
 
         Q = np.dot(first_state, self.model[action])     # value estimate of current model
         
-        self.fluctuations.append(abs(Q_TD-Q))       # saving the fluctuation
+        self.fluctuations.append(abs(np.clip((Q_TD-Q),-10,10)))       # saving the fluctuation
 
         GRADIENT = first_state * np.clip((Q_TD - Q), -10,10)     # gradient descent
         
         self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
         #print(self.model)
 
-        '''# Train with augmented data
+        # Train with augmented data
         #update with horizontally shifted state:
         hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
         self.model[hshift_action] = hshift_model_update
@@ -252,7 +252,7 @@ def n_step_TD(self, n):
 
         #update with turn around:
         fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[fullturn_action] = fullturn_model_update'''
+        self.model[fullturn_action] = fullturn_model_update
 
 
 
@@ -276,33 +276,13 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
 
 
 
-def vertical_shift(state, action):
+def horizontal_shift(state, action):
     #initializing the shifted state:
     shifted_state = np.copy(state)
 
     #shifting up to down:
     shifted_state[12:18] = state[18:24]
     shifted_state[18:24] = state[12:18]
-
-    #shifting actions
-    if action == "UP":
-        new_action = "DOWN"
-    
-    elif action == "DOWN":
-        new_action = "UP"
-
-    else:
-        new_action = action
-
-    return shifted_state, new_action
-
-def horizontal_shift(state, action):
-    #initializing the shifted state:
-    shifted_state = np.copy(state)
-
-    #shifting up to down:
-    shifted_state[0:6] = state[6:12]
-    shifted_state[6:12] = state[0:6]
 
     #shifting actions
     if action == "LEFT":
@@ -316,10 +296,30 @@ def horizontal_shift(state, action):
 
     return shifted_state, new_action
 
-def turn_left(state, action):
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[0:6] = state[6:12]
+    shifted_state[6:12] = state[0:6]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_right(state, action):
     #initializing the turned state:
     turned_state = np.copy(state)
-
+    
     #up -> left 
     turned_state[0:6] = state[12:18]
     #down -> right
@@ -331,23 +331,23 @@ def turn_left(state, action):
 
     #shifting actions
     if action == 'LEFT':
-        new_action = 'DOWN'
+        new_action = 'UP'
     
     elif action == 'RIGHT':
-        new_action = 'UP'
+        new_action = 'DOWN'
 
     elif action == 'DOWN':
-        new_action = 'RIGHT'
+        new_action = 'LEFT'
     
     elif action == 'UP':
-        new_action = 'LEFT'
+        new_action = 'RIGHT'
 
     else:
         new_action = action
-
+    
     return turned_state, new_action
 
-def turn_right(state, action):
+def turn_left(state, action):
     #initializing the turned state:
     turned_state = np.copy(state)
 
@@ -362,16 +362,16 @@ def turn_right(state, action):
 
     #shifting actions
     if action == 'LEFT':
-        new_action = 'UP'
+        new_action = 'DOWN'
     
     elif action == 'RIGHT':
-        new_action = 'DOWN'
+        new_action = 'UP'
 
     elif action == 'DOWN':
-        new_action = 'LEFT'
+        new_action = 'RIGHT'
     
     elif action == 'UP':
-        new_action = 'RIGHT'
+        new_action = 'LEFT'
 
     else:
         new_action = action
