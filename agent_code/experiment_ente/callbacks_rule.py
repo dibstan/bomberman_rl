@@ -5,6 +5,9 @@ import numpy as np
 import random
 import pickle
 
+
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+
 def look_for_targets(free_space, start, targets, logger=None):
     """Find direction of closest target that can be reached via free tiles.
 
@@ -73,11 +76,11 @@ def setup(self):
     self.ignore_others_timer = 0
     self.current_round = 0
 
-          
+    ##############################################################################################       
     global exploding_tiles_map
     with open('explosion_map.pt', 'rb') as file:
         exploding_tiles_map = pickle.load(file)
-
+    ##############################################################################################
 
 
 def reset_self(self):
@@ -96,7 +99,8 @@ def act(self, game_state):
     what it contains.
     """
     self.logger.info(state_to_features(game_state))
-    random_prob = 0.2
+    if self.model == None: random_prob = 0
+    else: random_prob = .2
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -105,7 +109,7 @@ def act(self, game_state):
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
         #print(move)
-        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
+        return np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     self.logger.info('Picking action according to rule set')
     # Check if we are in a different round
@@ -420,5 +424,3 @@ def state_to_features(game_state: dict) -> np.array:
 
     #print(stacked_channels)
     return stacked_channels
-
-    

@@ -50,27 +50,27 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.75
+    else: random_prob = 0.5
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+
+        return move
         
-        #print(move)
-        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
-    
-    #if we just want to play and not overwrite training data
-    if not self.train: 
-        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+    if not self.train:
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        return move
+
+        #print(move)
+        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
+
         
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -128,7 +128,6 @@ def state_to_features(game_state: dict) -> np.array:
         
         closest_coin = position_coins[dist_norm.argmin()]
         
-        
         #find direction to go for closest coin:
         d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
         
@@ -146,12 +145,14 @@ def state_to_features(game_state: dict) -> np.array:
         closest_others = other_position[index_closest]
         
         
-        #find direction to go for closest coin:
+        #find direction to go for closest player:
         d_others_neighbor = np.subtract(neighbor_pos, closest_others)
         
-        #finding the direction that brings us closer the closest coin
+        #finding the direction that brings us closer the closest player
         closest_neighbor_other = np.linalg.norm(d_others_neighbor, axis = 1)
         others_index = np.argsort(closest_neighbor_other)
+    
+
 
     #creating channels for one-hot encoding
     channels = np.zeros((4,8))
@@ -188,7 +189,7 @@ def state_to_features(game_state: dict) -> np.array:
         if position_coins.size > 0:
             if np.any(np.sum(np.abs(position_coins-neighbor_pos[i]), axis=1) == 0):
                 channels[i][2] = 1
-
+         
 
         #finding bomb:
         if len(bomb_position) != 0:
@@ -229,6 +230,7 @@ def state_to_features(game_state: dict) -> np.array:
             if channels[priority_index[i]][0] != 1:
                 channels[priority_index[i]][4] = 1
                 break
+    
 
     if other_position.size > 0:
         for i in range(len(others_index)):
