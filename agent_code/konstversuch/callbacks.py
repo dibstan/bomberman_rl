@@ -50,7 +50,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 1.0
+    else: random_prob = 0.2
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -179,7 +179,6 @@ def state_to_features(game_state: dict) -> np.array:
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
     return stacked_channels
 
-
 def get_coin_prio(game_state, neighbor_pos, player):
     
     #converting positions of coins
@@ -245,7 +244,6 @@ def get_player_prio(game_state, neighbor_pos, player):
     index_closest = None
     others_index = []
     return other_position, others_index, index_closest
-
 
 def get_bomb_position(game_state):
     #getting bomb position from state
