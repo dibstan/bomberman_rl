@@ -5,6 +5,9 @@ import sklearn as sk
 from sklearn.feature_extraction import DictVectorizer
 import numpy as np
 from itertools import product
+from sklearn.datasets import make_regression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import train_test_split
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -32,6 +35,9 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
+    
+    with open('explosion_map.pt', 'rb') as file:
+        self.exploding_tiles_map = pickle.load(file)
 
     ##############################################################################################       
     global exploding_tiles_map
@@ -40,37 +46,34 @@ def setup(self):
     ##############################################################################################
 
 
-
 def act(self, game_state: dict) -> str:
     """
+    Your agent should parse the input, think, and take a decision.
+    When not in training mode, the maximum execution time for this method is 0.5s.
+
     :param self: The same object that is passed to all of your callbacks.
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    if self.model == None: random_prob = 0
-    else: random_prob = 0.3
+    #self.logger.info(game_state['bombs'])
+    random_prob = 1
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
-        betas = np.array(list(self.model.values()))
-        feature_vector = np.array(state_to_features(game_state))
-        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        
-        #print(move)
-        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
-    
-    #if we just want to play and not overwrite training data
-    if not self.train: 
-        self.logger.debug("Choosing action according to the epsilon greedy policy.")
-        betas = np.array(list(self.model.values()))
-        feature_vector = np.array(state_to_features(game_state))
-        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+
+        q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
+        for move in self.model:
+            q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
+        move = list(q_value.keys())[np.argmax(list(q_value.values()))]
+        #print(q_value)
+
         return move
-        
+
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
+
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -143,11 +146,9 @@ def state_to_features(game_state: dict) -> np.array:
     #describing priority: 
     if position_coins.size > 0:
         for i in range(len(priority_index)):
-            if channels[priority_index[i]][0] != 1 and channels[priority_index[i]][0] != -1:
+            if channels[priority_index[i]][0] != 1:
                 channels[priority_index[i]][4] = 1
                 break
-    #else:
-    #    for i in range(len())
 
     if other_position.size > 0:
         for i in range(len(others_index)):
@@ -180,16 +181,6 @@ def state_to_features(game_state: dict) -> np.array:
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
     return stacked_channels
-
-def closest_crate(game_state, player):
-    field = game_state['field']
-    rows,cols = np.where(field == 1)
-    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
-    crate_distance = np.linalg.norm(crates_position - np.array([player[0], player[1]]),axis = 1)
-
-    crate_prio = np.argsort(crate_distance)
-
-    return crate_prio
 
 def get_coin_prio(game_state, neighbor_pos, player):
     
@@ -314,3 +305,11 @@ def get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, 
             channels[i,5] = 1 
 
     return channels, player_tile
+
+
+
+
+
+            
+
+
