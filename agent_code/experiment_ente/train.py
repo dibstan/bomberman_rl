@@ -286,7 +286,7 @@ def n_step_TD(self, n):
             self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
             #print(self.model)
 
-            # Train with augmented data
+            '''# Train with augmented data
             #update with horizontally shifted state:
             hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
             self.model[hshift_action] = hshift_model_update
@@ -305,7 +305,7 @@ def n_step_TD(self, n):
 
             #update with turn around:
             fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-            self.model[fullturn_action] = fullturn_model_update
+            self.model[fullturn_action] = fullturn_model_update'''
 
 
 

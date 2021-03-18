@@ -5,6 +5,7 @@ import sklearn as sk
 from sklearn.feature_extraction import DictVectorizer
 import numpy as np
 from itertools import product
+from collections import deque
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -93,7 +94,7 @@ def state_to_features(game_state: dict) -> np.array:
         return None
 
     #creating channels for one-hot encoding
-    channels = np.zeros((4,8))
+    channels = np.zeros((4,9))
     
     #describing field of agent:
     player_tile = np.zeros(2)
@@ -126,7 +127,10 @@ def state_to_features(game_state: dict) -> np.array:
         bomb_distances = np.linalg.norm(np.subtract(bomb_position, player) , axis = 1)
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
 
+
     '''filling neighboring tiles with values characterizing the direction'''
+
+        
 
     #each direction is encoded by [wall, crate, coin, bomb, priority, danger, closest_other, other_bomb]
     for i in range(np.shape(neighbor_pos)[0]):
@@ -139,6 +143,16 @@ def state_to_features(game_state: dict) -> np.array:
             #setting bomb value or danger value to 1 if appropriate:
             channels, player_tile = get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, exploding_tiles_map, bomb_position, player, player_tile, explosion_map, i)
             
+    #describing pritority for next free tile if a bomb has been placed
+    if player_tile[0] == 1:
+        free_tile = find_closest_free_tile(game_state, player, close_bomb_indices, bomb_position)
+        closest_free_index = get_tile_prio(free_tile, neighbor_pos)
+
+        for i in range(len(closest_free_index)):
+            if channels[closest_free_index[i]][0] != 1:
+                channels[closest_free_index[i]][8] = 1
+                break
+
 
     #describing priority: 
     if position_coins.size > 0:
@@ -302,3 +316,52 @@ def get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, 
             channels[i,5] = 1 
 
     return channels, player_tile
+  
+def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_position):
+
+    field =  game_state['field']
+    field = np.where(field == -1 , 1, field)            
+    #print(field)                 #set crates and walls to 1 
+    bomb_tuples = [tuple(x) for x in bomb_position]    
+
+    for j in close_bomb_indices:                                                #only look at close bombs              
+        dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
+        for tile in dangerous_tiles:
+            print(tile)
+            print(field[tile[0], tile[1]])
+            if field[tile[0],tile[1]] == 0: field[tile]=2 
+
+    neighbors = get_neighbor_pos(player_pos)
+    #print(neighbors)
+    q = deque()
+    for neighbor in neighbors:
+        if field[neighbor[0], neighbor[1]] != 1:
+            q.append(neighbor)
+    
+
+    while True:
+        pos = q.popleft()
+        neighbors = get_neighbor_pos(pos)
+        print(neighbors)
+
+        for neighbor in neighbors:
+            if field[neighbor[0], neighbor[1]] == 0:
+                closest_tile = neighbor
+                break
+            if field[neighbor[0], neighbor[1]] == 2:
+                q.append(neighbor)
+
+    return closest_tile
+    
+def get_tile_prio(tile,neighbors):
+    #finding the direction that brings us closer the closest coin
+    closest_neighbor = np.linalg.norm(neighbors-tile, axis=1)
+    priority_index = np.argsort(closest_neighbor)
+
+    return priority_index
+
+
+
+    
+
+
