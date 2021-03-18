@@ -142,16 +142,18 @@ def state_to_features(game_state: dict) -> np.array:
         if len(bomb_position) != 0:
             #setting bomb value or danger value to 1 if appropriate:
             channels, player_tile = get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, exploding_tiles_map, bomb_position, player, player_tile, explosion_map, i)
-            
+
+    #print(player_tile)        
     #describing pritority for next free tile if a bomb has been placed
     if player_tile[0] == 1:
         free_tile = find_closest_free_tile(game_state, player, close_bomb_indices, bomb_position)
-        closest_free_index = get_tile_prio(free_tile, neighbor_pos)
+        if free_tile is not None:
+            closest_free_index = get_tile_prio(free_tile, neighbor_pos)
 
-        for i in range(len(closest_free_index)):
-            if channels[closest_free_index[i]][0] != 1:
-                channels[closest_free_index[i]][8] = 1
-                break
+            for i in range(len(closest_free_index)):
+                if channels[closest_free_index[i]][0] != 1:
+                    channels[closest_free_index[i]][8] = 1
+                    break
 
 
     #describing priority: 
@@ -191,6 +193,7 @@ def state_to_features(game_state: dict) -> np.array:
         own_bomb.append(0)
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
+    #print(stacked_channels)
     return stacked_channels
 
 def get_coin_prio(game_state, neighbor_pos, player):
@@ -327,31 +330,38 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
     for j in close_bomb_indices:                                                #only look at close bombs              
         dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
         for tile in dangerous_tiles:
-            print(tile)
-            print(field[tile[0], tile[1]])
-            if field[tile[0],tile[1]] == 0: field[tile]=2 
-
+            if field[tile[0],tile[1]] == 0: field[tile[0],tile[1]]=2 
+    #print(field)
     neighbors = get_neighbor_pos(player_pos)
     #print(neighbors)
     q = deque()
     for neighbor in neighbors:
+        
         if field[neighbor[0], neighbor[1]] != 1:
+            #print(neighbor, field[neighbor[0], neighbor[1]])
             q.append(neighbor)
     
+    #Number of searched tiles:
+    it = 0
+    #print(q)
+    while it <= 20:
+        it += 1
 
-    while True:
         pos = q.popleft()
         neighbors = get_neighbor_pos(pos)
-        print(neighbors)
+        #print(neighbors)
 
         for neighbor in neighbors:
+            #print(field[neighbor[0], neighbor[1]])
             if field[neighbor[0], neighbor[1]] == 0:
                 closest_tile = neighbor
-                break
+                return closest_tile
             if field[neighbor[0], neighbor[1]] == 2:
                 q.append(neighbor)
+            else:
+                continue
 
-    return closest_tile
+    return None
     
 def get_tile_prio(tile,neighbors):
     #finding the direction that brings us closer the closest coin
