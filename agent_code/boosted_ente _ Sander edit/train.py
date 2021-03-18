@@ -4,22 +4,25 @@ from collections import namedtuple, deque
 from typing import List
 import numpy as np
 
+from sklearn import exceptions
+from sklearn.datasets import make_regression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import train_test_split
+
 import events as e
 from .callbacks import state_to_features
 
-# Transition cache
+# History cache
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+                        ('state', 'action', 'reward','next_state'))
 
-# Hyperparameters
+# Hyper parameters
+RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
+ALPHA = 0.1
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':4}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
-RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.1    # learning rate
-GAMMA = 0.001     # discount rate
+GAMMA = 0.01     # discount rate
 N = 4   # N step temporal difference
-CLIP = 10   # initial clip value
-N_CLIPPER = 10      # number of fluctuations considering in auto clipping
-
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
@@ -29,34 +32,26 @@ MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
 WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
 INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
-
-
 def setup_training(self):
     """
-    Initialise self for training purpose.
-
-    This is called after `setup` in callbacks.py.
-
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-
+    # transition cache
     self.transitions = deque(maxlen=HIST_SIZE)
-
+    
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
+        
     except:
-        self.model = None
-
+        self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
+        'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
+    
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
+        
+    self.fluctuations = []
     
-    self.fluctuations = []      # array for the fluctuations of each each round
-    
-    self.clip = CLIP    # clip value
-    
-    
-
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
     :param self: This object is passed to all callbacks and you can set arbitrary values.
@@ -88,7 +83,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     
 
     # updating the model using batched gradient descent n-step temporal difference 
-    n_step_TD(self, N)
+    experience_replay(self, N)
 
 
     # Store the model
@@ -96,15 +91,9 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
 
-    # Store the fluctuations
+    #Store the fluctuations
     with open('fluctuations.pt', 'wb') as file:
         pickle.dump(self.fluctuations, file)
-    
-    # updating the clip value
-    try:
-        self.clip = CLIP#np.mean(self.fluctuations[-N_CLIPPER:])
-    except:
-        self.clip = CLIP
     
 
     # delete history cache
@@ -154,7 +143,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     old_player_coor = old_game_state['self'][3]     
     new_player_coor = new_game_state['self'][3]
         
-    ############################################################################################################    
+     
     #define event coin_chaser
     coin_coordinates = old_game_state['coins']
     if len(coin_coordinates) != 0:
@@ -183,33 +172,25 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
             #print('invalid')
             events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
-    ######################################################################################################
+    
 
 
-
-def n_step_TD(self, n):
+def experience_replay(self, n):
     '''
         input: self, n: nummber of steps in n-step temporal differnece
         updates the model using n-step temporal differnce and gradient descent
     '''
     
-    #setting up model if necessary
     D = len(self.transitions[0].state)      # feature dimension
-    
-    if self.model == None:
-        init_beta = np.zeros(D)
-        self.model = {'UP': init_beta, 
-        'RIGHT': init_beta, 'DOWN': init_beta,
-        'LEFT': init_beta, 'WAIT': init_beta, 'BOMB': init_beta}
 
     total_batch = np.array(self.transitions, dtype=object)      # converting the deque to numpy array for conveniency
     total_batch[-1,2] = np.zeros(D)
-    
     
     total_batch_size = np.shape(total_batch)[0]
     effective_batch_size = total_batch_size - n 
 
     effective_batch = total_batch[:effective_batch_size]    # training instances that have n next instances
+
 
     # Creating the batches
     B = {'UP':{}, 'RIGHT':{}, 'DOWN':{},'LEFT':{}, 'WAIT':{}, 'BOMB':{}}
@@ -239,189 +220,36 @@ def n_step_TD(self, n):
         except ValueError:
             nth_states = np.array([])
 
-       
-        # updating the model
-        N = np.shape(rewards)[0]    # size of subbatch
+        #print(states, nth_states, rewards)
 
-        discount = np.ones(n+1)*GAMMA   # discount for the i th future reward: GAMMA^i 
-        for i in range(0,n+1):
-            discount[i] = discount[i]**i
-
-        
-        if N != 0:
-            self.model[action] = update_model(self, states, discount, rewards, nth_states, action, n, fluctuations)
-
-            # Train with augmented data
-            feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations)
+        if states != np.array([]):
             
+            if np.shape(states)[0] == 1:
+                states = states.reshape(1, -1)
+                nth_states = nth_states.reshape(1, -1)
+
+            discount = np.ones(n+1)*GAMMA   # discount for the i th future reward: GAMMA^i 
+            for i in range(0,n+1):
+                discount[i] = discount[i]**i
+
+            Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
+            Q = self.model[action].predict(states)
+
+            fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-10,10))))
+            
+            self.model[action].fit(states, Q_TD)
+           
     # saving the fluctuations
     self.fluctuations.append(np.max(fluctuations))
-
-    
-    
-
-def update_model(self, states, discount, rewards, nth_states, action, n, fluctuations):
-    
-    Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
-    
-    Q = np.dot(states,self.model[action])   # Array holding the predicted Q-value for each instance in subbatch
-    
-    fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-self.clip,self.clip))))
-    
-    GRADIENT = np.dot(states.T, np.clip((Q_TD-Q), -self.clip,self.clip))   # gradient descent
-    
-    return self.model[action] + (ALPHA / N) * GRADIENT    #updating the model
-
-
-
-def feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations):
-    #update with horizontally shifted state:
-    hshift_states, hshift_action = horizontal_shift(states, action)
-    hshift_nth_states, hshift_action = horizontal_shift(nth_states, action)
-    self.model[hshift_action] = update_model(self, hshift_states, discount, rewards, hshift_nth_states, hshift_action, n, fluctuations)
-
-    #update with vertically shifted state:
-    vshift_states, vshift_action = vertical_shift(states, action)
-    vshift_nth_states, vshift_action = vertical_shift(nth_states, action)
-    self.model[vshift_action] = update_model(self, vshift_states, discount, rewards, vshift_nth_states, vshift_action, n, fluctuations)
-
-    #update with turn left:
-    rturn_states, rturn_action = turn_right(states, action)
-    rturn_nth_states, rturn_action = turn_right(nth_states, action)
-    self.model[rturn_action] = update_model(self, rturn_states, discount, rewards, rturn_nth_states, rturn_action, n, fluctuations)
-
-    #update with turn right:
-    lturn_states, lturn_action = turn_left(states, action)
-    lturn_nth_states, lturn_action = turn_left(nth_states, action)
-    self.model[lturn_action] = update_model(self, lturn_states, discount, rewards, lturn_nth_states, lturn_action, n, fluctuations)
-
-    #update with turn around:
-    fturn_states, fturn_action = turn_around(states, action)
-    fturn_nth_states, fturn_action = turn_around(nth_states, action)
-    self.model[fturn_action] = update_model(self, fturn_states, discount, rewards, fturn_nth_states, fturn_action, n, fluctuations)
-
-
-
-def horizontal_shift(state, action):
-    #initializing the shifted state:
-    shifted_state = np.copy(state)
-
-    #shifting up to down:
-    shifted_state[:,16:24] = state[:,24:32]
-    shifted_state[:,24:32] = state[:,16:24]
-
-    #shifting actions
-    if action == "LEFT":
-        new_action = "RIGHT"
-    
-    elif action == "RIGHT":
-        new_action = "LEFT"
-
-    else:
-        new_action = action
-
-    return shifted_state, new_action
-
-def vertical_shift(state, action):
-    #initializing the shifted state:
-    shifted_state = np.copy(state)
-
-    #shifting up to down:
-    shifted_state[:,0:8] = state[:,8:16]
-    shifted_state[:,8:16] = state[:,0:8]
-
-    #shifting actions
-    if action == "UP":
-        new_action = "DOWN"
-    
-    elif action == "DOWN":
-        new_action = "UP"
-
-    else:
-        new_action = action
-
-    return shifted_state, new_action
-
-def turn_right(state, action):
-    #initializing the turned state:
-    turned_state = np.copy(state)
-    
-    #up -> left 
-    turned_state[:,0:8] = state[:,16:24]
-    #down -> right
-    turned_state[:,8:16] = state[:,24:32]
-    #right -> up
-    turned_state[:,16:24] = state[:,8:16]
-    #left -> down
-    turned_state[:,24:32] = state[:,0:8]
-
-    #shifting actions
-    if action == 'LEFT':
-        new_action = 'UP'
-    
-    elif action == 'RIGHT':
-        new_action = 'DOWN'
-
-    elif action == 'DOWN':
-        new_action = 'LEFT'
-    
-    elif action == 'UP':
-        new_action = 'RIGHT'
-
-    else:
-        new_action = action
-    
-    return turned_state, new_action
-
-def turn_left(state, action):
-    #initializing the turned state:
-    turned_state = np.copy(state)
-
-    #up -> left 
-    turned_state[:,0:8] = state[:,24:32]
-    #down -> right
-    turned_state[:,8:16] = state[:,16:24]
-    #right -> up
-    turned_state[:,16:24] = state[:,0:8]
-    #left -> down
-    turned_state[:,24:32] = state[:,8:16]
-
-    #shifting actions
-    if action == 'LEFT':
-        new_action = 'DOWN'
-    
-    elif action == 'RIGHT':
-        new_action = 'UP'
-
-    elif action == 'DOWN':
-        new_action = 'RIGHT'
-    
-    elif action == 'UP':
-        new_action = 'LEFT'
-
-    else:
-        new_action = action
-
-    return turned_state, new_action
-
-def turn_around(state, action):
-    #first turn:
-    turn1, action1 = turn_left(state, action)
-
-    #second turn:
-    turn2, action2 = turn_left(turn1, action1)
-
-    return turn2, action2
-
-
-
 
 def Q_func(self, state):
     '''
         input: self, state
         output: Q value of the best action
     '''
-    vec_model = np.array(list(self.model.values()))     # vectorizing the model dict
-    Q_pred = np.dot(vec_model,state.T)
-    Q_max = np.max(Q_pred, axis = 0)
+    Q_values = []
+    for action in self.model.keys():
+        Q_values.append(self.model[action].predict(state))
+    
+    Q_max = np.max(Q_values, axis = 0)
     return Q_max      # return the max Q value
