@@ -435,3 +435,7 @@ def get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, 
             channels[i,5] = 1 
 
     return channels, player_tile
+
+
+
+
