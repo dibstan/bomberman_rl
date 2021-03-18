@@ -14,7 +14,7 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.001    # learning rate
-GAMMA = 0.001     # discount rate
+GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
 
 # Auxillary events
@@ -128,13 +128,13 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_RIGHT: -2,
         e.MOVED_UP: -2,
         #VALID_ACTION: -2,
-        COIN_CHASER: 3,
+        COIN_CHASER: 2,
         MOVED_OUT_OF_DANGER: 5,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
         e.CRATE_DESTROYED: 5,   #2
         e.COIN_FOUND: 1,
-        CRATE_CHASER: 2,
+        CRATE_CHASER: 0.5,
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         BOMB_DESTROYED_NOTHING: -30
@@ -170,6 +170,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1) #...new player position
 
         if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            #print(COIN_CHASER)
             events.append(COIN_CHASER)                          # -> reward
 
     
@@ -187,14 +188,17 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         #event in case the agent sucsessfully moved away from a dangerous tile -> reward     
         if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
             events.append(MOVED_OUT_OF_DANGER)
+            #print(MOVED_OUT_OF_DANGER)
 
         #event in case agent stayed on a dangerous tile -> penalty
         if old_player_coor in dangerous_tiles and ("WAITED" in events or "INVALID_ACTION" in events):
             events.append(STAYED_NEAR_BOMB)
+            #print(STAYED_NEAR_BOMB)
         
         #event in case agent moved onto a dangerous tile -> penalty
         if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
             events.append(MOVED_INTO_DANGER)
+            #print(MOVED_INTO_DANGER)
 
     #if bombs destroyed nothing
     if 'BOMB_EXPLODED' in events:                   #a bomb placed by our agent exploded
@@ -217,11 +221,12 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         
         
     #define event for bomb next to crate
-        if self_action == 'BOMB':                                       #if bomb is placed...
+        if self_action == 'BOMB' and e.INVALID_ACTION not in events:    #if bomb is placed...
             #if min(old_crate_distance) == 1:    # ... give reward for each crate neighbouring bomb position                   
                 #events.append(BOMB_NEXT_TO_CRATE)   
             for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
-                events.append(BOMB_NEXT_TO_CRATE)                   
+                events.append(BOMB_NEXT_TO_CRATE)    
+                #print(BOMB_NEXT_TO_CRATE)               
             if len(np.where(old_crate_distance==1)[0]) == 0 :                                                       #bomb is not placed next to crate
                 events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
                 #print(BOMB_NOT_NEXT_TO_CRATE)
