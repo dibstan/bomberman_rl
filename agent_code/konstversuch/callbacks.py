@@ -50,7 +50,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.2
+    else: random_prob = 0.3
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -143,9 +143,11 @@ def state_to_features(game_state: dict) -> np.array:
     #describing priority: 
     if position_coins.size > 0:
         for i in range(len(priority_index)):
-            if channels[priority_index[i]][0] != 1:
+            if channels[priority_index[i]][0] != 1 and channels[priority_index[i]][0] != -1:
                 channels[priority_index[i]][4] = 1
                 break
+    #else:
+    #    for i in range(len())
 
     if other_position.size > 0:
         for i in range(len(others_index)):
@@ -178,6 +180,16 @@ def state_to_features(game_state: dict) -> np.array:
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
     return stacked_channels
+
+def closest_crate(game_state, player):
+    field = game_state['field']
+    rows,cols = np.where(field == 1)
+    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
+    crate_distance = np.linalg.norm(crates_position - np.array([player[0], player[1]]),axis = 1)
+
+    crate_prio = np.argsort(crate_distance)
+
+    return crate_prio
 
 def get_coin_prio(game_state, neighbor_pos, player):
     
