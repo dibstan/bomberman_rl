@@ -58,7 +58,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     #self.logger.info(game_state['bombs'])
-    random_prob = 1
+    random_prob = 0.7
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -67,7 +67,7 @@ def act(self, game_state: dict) -> str:
         for move in self.model:
             q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
         move = list(q_value.keys())[np.argmax(list(q_value.values()))]
-        print(q_value)
+        #print(q_value)
         #print(q_value)
         #print(move)
 

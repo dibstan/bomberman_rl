@@ -8,6 +8,8 @@ from sklearn import exceptions
 from sklearn.datasets import make_regression
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import AdaBoostRegressor
 
 import events as e
 from .callbacks import state_to_features
@@ -18,10 +20,10 @@ Transition = namedtuple('Transition',
 
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-ALPHA = 0.1
+ALPHA = .3
 PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':4}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
-GAMMA = 0.01     # discount rate
+GAMMA = 0.5     # discount rate
 N = 4   # N step temporal difference
 
 # Auxillary events
@@ -42,15 +44,22 @@ def setup_training(self):
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-        
+        self.isFitted = {'UP': True, 'RIGHT':True, 'DOWN':True, 'LEFT':True, 'WAIT':True, 'BOMB':True}
+
     except:
+        #self.model = {'UP':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'RIGHT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),
+        #'LEFT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'WAIT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'BOMB':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng)}
         self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
         'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
-    
+        self.isFitted = {'UP':False, 'RIGHT':False, 'DOWN':False, 'LEFT':False, 'WAIT':False, 'BOMB':False}
+
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
         
+        
     self.fluctuations = []
+    
+    
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -193,8 +202,7 @@ def experience_replay(self, n):
 
 
     # Creating the batches
-    B = {'UP':{}, 'RIGHT':{}, 'DOWN':{},'LEFT':{}, 'WAIT':{}, 'BOMB':{}}
-    actions = list(B.keys())
+    actions = list(self.model.keys())
 
     fluctuations = []   # Array for the fluctuations in each action
 
@@ -220,8 +228,8 @@ def experience_replay(self, n):
         except ValueError:
             nth_states = np.array([])
 
-        #print(states, nth_states, rewards)
 
+        #print(states, nth_states, rewards)
         if states != np.array([]):
             
             if np.shape(states)[0] == 1:
@@ -231,16 +239,29 @@ def experience_replay(self, n):
             discount = np.ones(n+1)*GAMMA   # discount for the i th future reward: GAMMA^i 
             for i in range(0,n+1):
                 discount[i] = discount[i]**i
-
-            Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
-            Q = self.model[action].predict(states)
-
-            fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-10,10))))
             
+            if self.isFitted[action] == True:
+                Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
+                
+                Q = self.model[action].predict(states)
+
+                fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-10,10))))
+            else:
+                Q_TD = np.dot(rewards,discount)
+
+            
+            print(action, Q_TD, Q)
+            self.model[action].n_estimators += 1
             self.model[action].fit(states, Q_TD)
+
+            print(action, Q_TD, self.model[action].predict(states))
+            
+            self.isFitted[action] = True
+            
            
     # saving the fluctuations
-    self.fluctuations.append(np.max(fluctuations))
+    if len(fluctuations) != 0:
+        self.fluctuations.append(np.max(fluctuations))
 
 def Q_func(self, state):
     '''
