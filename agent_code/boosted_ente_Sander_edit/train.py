@@ -21,9 +21,9 @@ Transition = namedtuple('Transition',
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
 ALPHA = .3
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':4}  # parameters for the GradientBoostingRegressor
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
-GAMMA = 0.5     # discount rate
+GAMMA = 0.01     # discount rate
 N = 4   # N step temporal difference
 
 # Auxillary events
@@ -115,14 +115,14 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 12,
+        e.COIN_COLLECTED: 20,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -20,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
-        COIN_CHASER: 0.5,
+        COIN_CHASER: 7,
         VALID_ACTION: -1,
-        MOVED_AWAY_FROM_BOMB: 1,
+        MOVED_AWAY_FROM_BOMB: 0,
         WAITED_IN_EXPLOSION_RANGE: -1,
         INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
     }
@@ -240,6 +240,9 @@ def experience_replay(self, n):
             for i in range(0,n+1):
                 discount[i] = discount[i]**i
             
+            if action == 'BOMB':
+                discount[-1] = 1
+            
             if self.isFitted[action] == True:
                 Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
                 
@@ -250,11 +253,11 @@ def experience_replay(self, n):
                 Q_TD = np.dot(rewards,discount)
 
             
-            print(action, Q_TD, Q)
-            self.model[action].n_estimators += 1
+            #print(action, Q_TD, Q)
+            self.model[action].n_estimators += 3
             self.model[action].fit(states, Q_TD)
 
-            print(action, Q_TD, self.model[action].predict(states))
+            #print(action, Q_TD, self.model[action].predict(states))
             
             self.isFitted[action] = True
             
@@ -270,7 +273,10 @@ def Q_func(self, state):
     '''
     Q_values = []
     for action in self.model.keys():
-        Q_values.append(self.model[action].predict(state))
+        if self.isFitted[action] == True:
+            Q_values.append(self.model[action].predict(state))
+        else:
+            Q_values.append(-np.inf)
     
     Q_max = np.max(Q_values, axis = 0)
     return Q_max      # return the max Q value
