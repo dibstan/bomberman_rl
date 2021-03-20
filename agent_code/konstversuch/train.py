@@ -13,11 +13,11 @@ Transition = namedtuple('Transition',
 
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.001    # learning rate
-GAMMA = 0.0001     # discount rate
+ALPHA = 0.01    # learning rate
+GAMMA = 0.001     # discount rate
 N = 5   # N step temporal difference
-CLIP = 20  # initial clip value
-N_CLIPPER = 30      # number of fluctuations considering in auto clipping
+CLIP = 30  # initial clip value
+N_CLIPPER = 35      # number of fluctuations considering in auto clipping
 
 
 # Auxillary events
@@ -127,9 +127,9 @@ def reward_from_events(self, events: List[str]) -> int:
     '''
     game_rewards = {
         e.COIN_COLLECTED: 12,
-        e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -150,
-        WAITING_EVENT: -3,
+        e.KILLED_OPPONENT: 30,
+        e.KILLED_SELF: -250,
+        WAITING_EVENT: -4,
         e.INVALID_ACTION: -7,
         e.MOVED_DOWN: -1,
         e.MOVED_LEFT: -1,
@@ -137,12 +137,12 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_UP: -1,
         #VALID_ACTION: -2,
         COIN_CHASER: 1,
-        MOVED_OUT_OF_DANGER: 8,
-        STAYED_NEAR_BOMB: -5,
+        MOVED_OUT_OF_DANGER: 9,
+        STAYED_NEAR_BOMB: -8,
         MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 8,   #2
+        e.CRATE_DESTROYED: 6,   #2
         e.COIN_FOUND: 2,
-        CRATE_CHASER: 0.5,
+        CRATE_CHASER: 0.0,
         BOMB_NEXT_TO_CRATE: 3,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         BOMB_DESTROYED_NOTHING: -3
@@ -247,7 +247,7 @@ def n_step_TD(self, n):
     
     #setting up model if necessary
     D = len(self.transitions[0].state)      # feature dimension
-    D = 225
+    #D = 225
     if self.model == None:
         init_beta = np.zeros(D)
         self.model = {'UP': init_beta, 
@@ -286,11 +286,11 @@ def n_step_TD(self, n):
             
             self.fluctuations.append(abs(np.clip((Q_TD-Q),-self.clip, self.clip)))       # saving the fluctuation
 
-            GRADIENT = first_state * np.clip((Q_TD - Q), -self.clip,self.clip)     # gradient descent
+            GRADIENT = first_state * np.clip((Q_TD - Q), -self.clip, self.clip)     # gradient descent
             
             self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
             #print(self.model)
-            '''
+            
             # Train with augmented data
             #update with horizontally shifted state:
             hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
@@ -311,7 +311,7 @@ def n_step_TD(self, n):
             #update with turn around:
             fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
             self.model[fullturn_action] = fullturn_model_update
-            '''
+            
 
 
 def feature_augmentation(self, aug_direction, first_state, last_state, action, disc, n_future_rew, n):
@@ -328,7 +328,7 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
     Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
 
     GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
-    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip,self.clip)   # updating the model for the relevant action
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip, self.clip)   # updating the model for the relevant action
 
     return model_update, shift_action
 

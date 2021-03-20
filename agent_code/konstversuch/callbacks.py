@@ -99,7 +99,7 @@ def act(self, game_state):
     what it contains.
     """
     self.logger.info(state_to_features(game_state))
-    random_prob = 1 
+    random_prob = 1
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -229,7 +229,7 @@ def act(self, game_state):
             return a
 
 
-def state_to_features(game_state):
+'''def state_to_features(game_state):
     if game_state is not None:
         dist=7
         field = -np.ones((2*dist+1,2*dist+1))
@@ -254,10 +254,10 @@ def state_to_features(game_state):
             newfield[bomb[0]]= - 5 + bomb[1] #some calculation
         field[fieldxmin:fieldxmax,fieldymin:fieldymax]=(game_state["field"]+newfield)[xmin:xmax,ymin:ymax]      #MoRe InDeXaTiOn
         return field.reshape(1,-1)[0]
-    return None
+    return None'''
 
 
-#def state_to_features(game_state: dict) -> np.array:
+def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
 
@@ -273,7 +273,7 @@ def state_to_features(game_state):
     :return: np.array
     """
 
-    '''if game_state is None:
+    if game_state is None:
         return None
 
     #creating channels for one-hot encoding
@@ -282,7 +282,7 @@ def state_to_features(game_state):
     #describing field of agent:
     player_tile = np.zeros(2)
     
- #   ''''''finding positions of coins, bombs, dangerous tiles, crates and walls''''''
+    '''finding positions of coins, bombs, dangerous tiles, crates and walls'''
 
     #get player position:
     player = np.array(game_state['self'][3])
@@ -311,7 +311,7 @@ def state_to_features(game_state):
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
 
 
-   # ''''''filling neighboring tiles with values characterizing the direction''''''
+    '''filling neighboring tiles with values characterizing the direction'''
 
         
 
@@ -377,7 +377,7 @@ def state_to_features(game_state):
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
     #print(stacked_channels)
-    return stacked_channels'''
+    return stacked_channels
 
 def get_coin_prio(game_state, neighbor_pos, player):
     
@@ -527,7 +527,7 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
     #Number of searched tiles:
     it = 0
     #print(q)
-    while it <= 20:
+    while it <= 50:
         it += 1
 
         pos = q.popleft()
