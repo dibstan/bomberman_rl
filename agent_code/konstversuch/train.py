@@ -16,9 +16,6 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.01    # learning rate
 GAMMA = 0.001     # discount rate
 N = 5   # N step temporal difference
-CLIP = 10   # initial clip value
-N_CLIPPER = 30      # number of fluctuations considering in auto clipping
-
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
@@ -55,10 +52,10 @@ def setup_training(self):
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
     
-    self.fluctuations = []      # array for the fluctuations of each each round
-    self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
+    #self.fluctuations = []      # array for the fluctuations of each each round
+    #self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
     
-    self.clip = CLIP    # clip value
+
     
     
  
@@ -104,18 +101,13 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
+    '''
     # Store the fluctuations
     self.max_fluctuations.append(np.max(self.fluctuations))     # saving the maximum fluctuation of round
     self.fluctuations = []      # resetting the fluctuation array
     with open('fluctuations.pt', 'wb') as file:
         pickle.dump(self.max_fluctuations, file)
-
-    # updating the clip value
-    try:
-        self.clip = np.mean(self.max_fluctuations[-N_CLIPPER:])
-    except:
-        self.clip = CLIP
-
+    '''
     # delete history cache
     self.transitions = deque(maxlen=N)
 
@@ -282,9 +274,9 @@ def n_step_TD(self, n):
 
             Q = np.dot(first_state, self.model[action])     # value estimate of current model
             
-            self.fluctuations.append(abs(np.clip((Q_TD-Q),-self.clip, self.clip)))       # saving the fluctuation
+            #self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
 
-            GRADIENT = first_state * np.clip((Q_TD - Q), -self.clip,self.clip)     # gradient descent
+            GRADIENT = first_state * np.clip((Q_TD - Q), -5, 5)     # gradient descent
             
             self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
             #print(self.model)
@@ -326,7 +318,7 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
     Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
 
     GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
-    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip,self.clip)   # updating the model for the relevant action
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
 
     return model_update, shift_action
 
