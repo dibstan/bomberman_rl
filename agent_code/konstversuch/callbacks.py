@@ -1,80 +1,37 @@
-from collections import deque
-from random import shuffle
-from itertools import product
-import numpy as np
-import random
+import os
 import pickle
-
+import random
+import sklearn as sk
+from sklearn.feature_extraction import DictVectorizer
+import numpy as np
+from itertools import product
+from collections import deque
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
-def look_for_targets(free_space, start, targets, logger=None):
-    """Find direction of closest target that can be reached via free tiles.
-
-    Performs a breadth-first search of the reachable free tiles until a target is encountered.
-    If no target can be reached, the path that takes the agent closest to any target is chosen.
-
-    Args:
-        free_space: Boolean numpy array. True for free tiles and False for obstacles.
-        start: the coordinate from which to begin the search.
-        targets: list or array holding the coordinates of all target tiles.
-        logger: optional logger object for debugging.
-    Returns:
-        coordinate of first step towards closest target or towards tile closest to any target.
-    """
-    if len(targets) == 0: return None
-
-    frontier = [start]
-    parent_dict = {start: start}
-    dist_so_far = {start: 0}
-    best = start
-    best_dist = np.sum(np.abs(np.subtract(targets, start)), axis=1).min()
-
-    while len(frontier) > 0:
-        current = frontier.pop(0)
-        # Find distance from current position to all targets, track closest
-        d = np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
-        if d + dist_so_far[current] <= best_dist:
-            best = current
-            best_dist = d + dist_so_far[current]
-        if d == 0:
-            # Found path to a target's exact position, mission accomplished!
-            best = current
-            break
-        # Add unexplored free neighboring tiles to the queue in a random order
-        x, y = current
-        neighbors = [(x, y) for (x, y) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] if free_space[x, y]]
-        shuffle(neighbors)
-        for neighbor in neighbors:
-            if neighbor not in parent_dict:
-                frontier.append(neighbor)
-                parent_dict[neighbor] = current
-                dist_so_far[neighbor] = dist_so_far[current] + 1
-    if logger: logger.debug(f'Suitable target found at {best}')
-    # Determine the first step towards the best found target tile
-    current = best
-    while True:
-        if parent_dict[current] == start: return current
-        current = parent_dict[current]
-
 
 def setup(self):
-    """Called once before a set of games to initialize data structures etc.
-
-    The 'self' object passed to this method will be the same in all other
-    callback methods. You can assign new properties (like bomb_history below)
-    here or later on and they will be persistent even across multiple games.
-    You can also use the self.logger object at any time to write to the log
-    file for debugging (see https://docs.python.org/3.7/library/logging.html).
     """
-    self.logger.debug('Successfully entered setup code')
-    np.random.seed()
-    # Fixed length FIFO queues to avoid repeating the same actions
-    self.bomb_history = deque([], 5)
-    self.coordinate_history = deque([], 20)
-    # While this timer is positive, agent will not hunt/attack opponents
-    self.ignore_others_timer = 0
-    self.current_round = 0
+    Setup your code. This is called once when loading each agent.
+    Make sure that you prepare everything such that act(...) can be called.
+
+    When in training mode, the separate `setup_training` in train.py is called
+    after this method. This separation allows you to share your trained agent
+    with other students, without revealing your training code.
+
+    In this example, our model is a set of probabilities over actions
+    that are is independent of the game state.
+
+    :param self: This object is passed to all callbacks and you can set arbitrary values.
+    """
+    if self.train and not os.path.isfile("my-saved-model.pt"):
+        self.logger.info("Setting up model from scratch.")
+        ##weights = np.random.rand(len(ACTIONS))
+        self.model = None ## weights / weights.sum()
+    else:
+        self.logger.info("Loading model from saved state.")
+        with open("my-saved-model.pt", "rb") as file:
+            self.model = pickle.load(file)
 
     ##############################################################################################       
     global exploding_tiles_map
@@ -83,33 +40,31 @@ def setup(self):
     ##############################################################################################
 
 
-def reset_self(self):
-    self.bomb_history = deque([], 5)
-    self.coordinate_history = deque([], 20)
-    # While this timer is positive, agent will not hunt/attack opponents
-    self.ignore_others_timer = 0
 
-
-def act(self, game_state):
+def act(self, game_state: dict) -> str:
     """
-    Called each game step to determine the agent's next action.
-
-    You can find out about the state of the game environment via game_state,
-    which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
-    what it contains.
+    :param self: The same object that is passed to all of your callbacks.
+    :param game_state: The dictionary that describes everything on the board.
+    :return: The action to take as a string.
     """
+    # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
+<<<<<<< HEAD
     random_prob = 1
+=======
+    if self.model == None: random_prob = 0
+    else: random_prob = 1
+>>>>>>> e73080ba134083bbfa1adbbd95a9a57c452e1b80
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = np.array(list(self.model.values()))
-        #print(betas)
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
         #print(move)
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
+<<<<<<< HEAD
 
     self.logger.info('Picking action according to rule set')
     # Check if we are in a different round
@@ -255,6 +210,19 @@ def act(self, game_state):
         field[fieldxmin:fieldxmax,fieldymin:fieldymax]=(game_state["field"]+newfield)[xmin:xmax,ymin:ymax]      #MoRe InDeXaTiOn
         return field.reshape(1,-1)[0]
     return None'''
+=======
+    
+    #if we just want to play and not overwrite training data
+    if not self.train: 
+        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+        betas = np.array(list(self.model.values()))
+        feature_vector = np.array(state_to_features(game_state))
+        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        return move
+        
+    self.logger.debug("Querying model for action.")
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
+>>>>>>> e73080ba134083bbfa1adbbd95a9a57c452e1b80
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -291,7 +259,7 @@ def state_to_features(game_state: dict) -> np.array:
     explosion_map = game_state['explosion_map']
 
     #getting bomb position from state 
-  #  ''''''try to vectorize''''''
+    '''try to vectorize'''
     bomb_position = get_bomb_position(game_state)
     
     #positions of neighboring tiles in the order (UP, DOWN, LEFT, RIGHT)
@@ -553,4 +521,3 @@ def get_tile_prio(tile,neighbors):
 
     return priority_index
 
- 
