@@ -13,9 +13,12 @@ Transition = namedtuple('Transition',
 
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-ALPHA = 0.01    # learning rate
-GAMMA = 0.001     # discount rate
+ALPHA = 0.001    # learning rate
+GAMMA = 0.0001     # discount rate
 N = 5   # N step temporal difference
+CLIP = 20  # initial clip value
+N_CLIPPER = 30      # number of fluctuations considering in auto clipping
+
 
 # Auxillary events
 WAITING_EVENT = "WAIT"
@@ -52,10 +55,10 @@ def setup_training(self):
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
     
-    #self.fluctuations = []      # array for the fluctuations of each each round
-    #self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
+    self.fluctuations = []      # array for the fluctuations of each each round
+    self.max_fluctuations = []      # array for the maximum fluctuations in all rounds
     
-
+    self.clip = CLIP    # clip value
     
     
  
@@ -101,13 +104,18 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
-    '''
     # Store the fluctuations
     self.max_fluctuations.append(np.max(self.fluctuations))     # saving the maximum fluctuation of round
     self.fluctuations = []      # resetting the fluctuation array
     with open('fluctuations.pt', 'wb') as file:
         pickle.dump(self.max_fluctuations, file)
-    '''
+
+    # updating the clip value
+    try:
+        self.clip = np.mean(self.max_fluctuations[-N_CLIPPER:])
+    except:
+        self.clip = CLIP
+
     # delete history cache
     self.transitions = deque(maxlen=N)
 
@@ -120,7 +128,7 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 12,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -80,
+        e.KILLED_SELF: -150,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
         e.MOVED_DOWN: -1,
@@ -128,17 +136,18 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_RIGHT: -1,
         e.MOVED_UP: -1,
         #VALID_ACTION: -2,
-        COIN_CHASER: 1.5,
-        MOVED_OUT_OF_DANGER: 5,
+        COIN_CHASER: 1,
+        MOVED_OUT_OF_DANGER: 8,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 5,   #2
-        e.COIN_FOUND: 1,
+        e.CRATE_DESTROYED: 8,   #2
+        e.COIN_FOUND: 2,
         CRATE_CHASER: 0.5,
-        BOMB_NEXT_TO_CRATE: 2,
+        BOMB_NEXT_TO_CRATE: 3,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         BOMB_DESTROYED_NOTHING: -3
     }
+
     reward_sum = 0
     for event in events:
         if event in game_rewards:
@@ -206,7 +215,8 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     #define crate chaser: the agent gets rewarded if he moves closer to crates ONLY if he currently has a bomb
     field = old_game_state['field']
     rows,cols = np.where(field == 1)
-    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
+    
+    crates_position = np.array([rows,cols]).T      #all crate coordinates in form [x,y] in one array
     old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
     new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
 
@@ -222,7 +232,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 #events.append(BOMB_NEXT_TO_CRATE)   
             for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
                 events.append(BOMB_NEXT_TO_CRATE)                   
-            if len(np.where(old_crate_distance==1)[0]) == 0 :                                                       #bomb is not placed next to crate
+            if len(np.where(old_crate_distance==1)[0]) == 0 :                                                  #bomb is not placed next to crate
                 events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
                 #print(BOMB_NOT_NEXT_TO_CRATE)
 
@@ -237,7 +247,7 @@ def n_step_TD(self, n):
     
     #setting up model if necessary
     D = len(self.transitions[0].state)      # feature dimension
-
+    D = 225
     if self.model == None:
         init_beta = np.zeros(D)
         self.model = {'UP': init_beta, 
@@ -271,16 +281,16 @@ def n_step_TD(self, n):
             '''print(action)
             print(n_future_rewards)
             print(Q_TD)'''
-
+            #print(first_state)
             Q = np.dot(first_state, self.model[action])     # value estimate of current model
             
-            #self.fluctuations.append(abs(np.clip((Q_TD-Q),-1,1)))       # saving the fluctuation
+            self.fluctuations.append(abs(np.clip((Q_TD-Q),-self.clip, self.clip)))       # saving the fluctuation
 
-            GRADIENT = first_state * np.clip((Q_TD - Q), -5, 5)     # gradient descent
+            GRADIENT = first_state * np.clip((Q_TD - Q), -self.clip,self.clip)     # gradient descent
             
             self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
             #print(self.model)
-
+            '''
             # Train with augmented data
             #update with horizontally shifted state:
             hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
@@ -301,7 +311,7 @@ def n_step_TD(self, n):
             #update with turn around:
             fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
             self.model[fullturn_action] = fullturn_model_update
-
+            '''
 
 
 def feature_augmentation(self, aug_direction, first_state, last_state, action, disc, n_future_rew, n):
@@ -318,7 +328,7 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
     Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
 
     GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
-    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip,self.clip)   # updating the model for the relevant action
 
     return model_update, shift_action
 
