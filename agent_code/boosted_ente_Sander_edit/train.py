@@ -44,14 +44,14 @@ def setup_training(self):
     try:
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-        self.isFitted = {'UP': True, 'RIGHT':True, 'DOWN':True, 'LEFT':True, 'WAIT':True, 'BOMB':True}
+        
 
     except:
-        #self.model = {'UP':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'RIGHT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),
-        #'LEFT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'WAIT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'BOMB':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng)}
+
         self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
         'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
-        self.isFitted = {'UP':False, 'RIGHT':False, 'DOWN':False, 'LEFT':False, 'WAIT':False, 'BOMB':False}
+    
+    self.isFitted = {'UP':False, 'RIGHT':False, 'DOWN':False, 'LEFT':False, 'WAIT':False, 'BOMB':False}
 
     with open('explosion_map.pt', 'rb') as file:
         self.exploding_tiles_map = pickle.load(file)
@@ -248,11 +248,11 @@ def experience_replay(self, n):
                 
                 Q = self.model[action].predict(states)
 
-                fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-10,10))))
+                fluctuations.append(np.abs(np.mean((Q_TD-Q))))
             else:
                 Q_TD = np.dot(rewards,discount)
 
-            
+            print(action, rewards, Q_TD)
             #print(action, Q_TD, Q)
             self.model[action].n_estimators += 3
             self.model[action].fit(states, Q_TD)
