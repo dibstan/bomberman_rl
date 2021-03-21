@@ -17,7 +17,7 @@ ALPHA = 0.01    # learning rate
 GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
 CLIP = 10   # initial clip value
-N_CLIPPER = 30      # number of fluctuations considering in auto clipping
+N_CLIPPER = 50      # number of fluctuations considering in auto clipping
 
 
 
