@@ -21,7 +21,7 @@ Transition = namedtuple('Transition',
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
 ALPHA = .3
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':4}  # parameters for the GradientBoostingRegressor
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
 GAMMA = 0.5     # discount rate
 N = 4   # N step temporal difference
@@ -174,7 +174,8 @@ def experience_replay(self, n):
             
             if self.isFitted[action] == True:
                 Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
-                
+                #print(max(Q_func(self,nth_states), min(Q_func(self,nth_states))))
+                #print(action,Q_func(self,nth_states))
                 Q = self.model[action].predict(states)
 
                 fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-10,10))))
@@ -183,7 +184,7 @@ def experience_replay(self, n):
 
             
             #print(action, Q_TD, Q)
-            self.model[action].n_estimators += 1
+            self.model[action].n_estimators += 3
             self.model[action].fit(states, Q_TD)
 
             #print(action, Q_TD, self.model[action].predict(states))
@@ -216,21 +217,21 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 12,
+        e.COIN_COLLECTED: 20,
         e.KILLED_OPPONENT: 5,
         e.KILLED_SELF: -80,
-        e.WAITED: -3,
+        e.WAITED: -4,
         e.INVALID_ACTION: -7,
-        e.MOVED_DOWN: -1,
-        e.MOVED_LEFT: -1,
-        e.MOVED_RIGHT: -1,
-        e.MOVED_UP: -1,
+        e.MOVED_DOWN: -2,
+        e.MOVED_LEFT: -2,
+        e.MOVED_RIGHT: -2,
+        e.MOVED_UP: -2,
         #VALID_ACTION: -2,
-        COIN_CHASER: 1.5,
+        COIN_CHASER: 7,
         MOVED_OUT_OF_DANGER: 5,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 5,   #2
+        e.CRATE_DESTROYED: 2,   #2
         e.COIN_FOUND: 1,
         CRATE_CHASER: 0.5,
         BOMB_NEXT_TO_CRATE: 2,
