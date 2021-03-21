@@ -20,24 +20,21 @@ Transition = namedtuple('Transition',
 
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-ALPHA = .3
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':4}  # parameters for the GradientBoostingRegressor
+ALPHA = .3      # learning rate
+GAMMA = 0.01    # discount rate
+KAPPA = 0.0    # adaption konstant for learning rate (if set to zero -> konstant learning rate)
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
-GAMMA = 0.5     # discount rate
+
 N = 4   # N step temporal difference
 
-#  Auxillary events
+# Auxillary events
 WAITING_EVENT = "WAIT"
 VALID_ACTION = "VALID_ACTION"
 COIN_CHASER = "COIN_CHASER"
-MOVED_OUT_OF_DANGER = "MOVED_AWAY_FROM_EXPLODING_TILE"
-MOVED_INTO_DANGER = "MOVED_INTO_DANGER"
-STAYED_NEAR_BOMB = 'STAYED_ON_EXPLODING_TILE'
-CRATE_CHASER = 'CRATE_CHASER'
-BOMB_NEXT_TO_CRATE = 'BOMB_NEXT_TO_CRATE'
-BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
-BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
-#LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
+MOVED_AWAY_FROM_BOMB = "MOVED_AWAY_FROM_BOMB"
+WAITED_IN_EXPLOSION_RANGE = "WAITED_IN_EXPLOSION_RANGE"
+INVALID_ACTION_IN_EXPLOSION_RANGE = "INVALID_ACTION_IN_EXPLOSION_RANGE"
 
 def setup_training(self):
     """
@@ -52,8 +49,6 @@ def setup_training(self):
         self.isFitted = {'UP': True, 'RIGHT':True, 'DOWN':True, 'LEFT':True, 'WAIT':True, 'BOMB':True}
 
     except:
-        #self.model = {'UP':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'RIGHT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),
-        #'LEFT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'WAIT':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng),'BOMB':AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=300, random_state=rng)}
         self.model = {'UP':GradientBoostingRegressor(**PARAMS),'RIGHT':GradientBoostingRegressor(**PARAMS),'DOWN':GradientBoostingRegressor(**PARAMS),
         'LEFT':GradientBoostingRegressor(**PARAMS),'WAIT':GradientBoostingRegressor(**PARAMS),'BOMB':GradientBoostingRegressor(**PARAMS)}
         self.isFitted = {'UP':False, 'RIGHT':False, 'DOWN':False, 'LEFT':False, 'WAIT':False, 'BOMB':False}
@@ -62,7 +57,10 @@ def setup_training(self):
         self.exploding_tiles_map = pickle.load(file)
         
         
-    self.fluctuations = []
+    self.fluctuations = []      # Fluctuations
+
+    self.round = 0
+    self.learning_rate = ALPHA
     
     
     
@@ -95,24 +93,100 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # Adding the last move to the transition cache
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, state_to_features(None), reward_from_events(self, events)))
     
+    #updating game round counter
+    self.round += 1
+
+    #updating learning rate
+    self.learning_rate = ALPHA/(1+KAPPA*self.round)
 
     # updating the model using batched gradient descent n-step temporal difference 
     experience_replay(self, N)
-
 
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
 
-
     #Store the fluctuations
     with open('fluctuations.pt', 'wb') as file:
         pickle.dump(self.fluctuations, file)
-    
 
     # delete history cache
     self.transitions = deque(maxlen=HIST_SIZE)
 
+   
+
+
+def reward_from_events(self, events: List[str]) -> int:
+    '''
+        Input: self, list of events
+        Output: sum of rewards resulting from the events
+    '''
+    game_rewards = {
+        e.COIN_COLLECTED: 20,
+        e.KILLED_OPPONENT: 5,
+        e.KILLED_SELF: -20,
+        WAITING_EVENT: -5,
+        e.INVALID_ACTION: -7,
+        COIN_CHASER: 7,
+        VALID_ACTION: -1,
+        MOVED_AWAY_FROM_BOMB: 0,
+        WAITED_IN_EXPLOSION_RANGE: -1,
+        INVALID_ACTION_IN_EXPLOSION_RANGE: -2 
+    }
+
+    reward_sum = 0
+
+    for event in events:
+        if event in game_rewards:
+            reward_sum += game_rewards[event]
+    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
+
+    return reward_sum
+
+
+
+def aux_events(self, old_game_state, self_action, new_game_state, events):
+
+    # Valid action
+    if e.INVALID_ACTION not in events:
+        events.append(VALID_ACTION)
+
+    # Waiting
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+
+    # Getting closer to coins
+    # get positions of the player
+    old_player_coor = old_game_state['self'][3]     
+    new_player_coor = new_game_state['self'][3]
+     
+    #define event coin_chaser
+    coin_coordinates = old_game_state['coins']
+    if len(coin_coordinates) != 0:
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1)
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1)
+
+    
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)
+    
+    #define events with bombs
+    old_bomb_coors = old_game_state['bombs']
+
+    dangerous_tiles = []            #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:
+            dangerous_tiles.append(coor)
+
+    if dangerous_tiles != []:       
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_AWAY_FROM_BOMB)
+        if old_player_coor in dangerous_tiles and self_action == "WAIT":
+            #print('waited')
+            events.append(WAITED_IN_EXPLOSION_RANGE)
+        if old_player_coor in dangerous_tiles and "INVALID_ACTION" in events:
+            #print('invalid')
+            events.append(INVALID_ACTION_IN_EXPLOSION_RANGE)
     
 
 
@@ -172,6 +246,9 @@ def experience_replay(self, n):
             for i in range(0,n+1):
                 discount[i] = discount[i]**i
             
+            if action == 'BOMB':
+                discount[-1] = 1
+            
             if self.isFitted[action] == True:
                 Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
                 
@@ -181,9 +258,12 @@ def experience_replay(self, n):
             else:
                 Q_TD = np.dot(rewards,discount)
 
-            
+            #print(action, rewards, Q_TD)
             #print(action, Q_TD, Q)
-            self.model[action].n_estimators += 1
+
+            # updating the model
+            self.model[action].learning_rate = self.learning_rate
+            self.model[action].n_estimators += 3
             self.model[action].fit(states, Q_TD)
 
             #print(action, Q_TD, self.model[action].predict(states))
@@ -195,6 +275,8 @@ def experience_replay(self, n):
     if len(fluctuations) != 0:
         self.fluctuations.append(np.max(fluctuations))
 
+
+
 def Q_func(self, state):
     '''
         input: self, state
@@ -204,125 +286,8 @@ def Q_func(self, state):
     for action in self.model.keys():
         if self.isFitted[action] == True:
             Q_values.append(self.model[action].predict(state))
+        else:
+            Q_values.append(-np.inf)
     
     Q_max = np.max(Q_values, axis = 0)
     return Q_max      # return the max Q value
-
-
-
-def reward_from_events(self, events: List[str]) -> int:
-    '''
-        Input: self, list of events
-        Output: sum of rewards resulting from the events
-    '''
-    game_rewards = {
-        e.COIN_COLLECTED: 12,
-        e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -80,
-        e.WAITED: -3,
-        e.INVALID_ACTION: -7,
-        e.MOVED_DOWN: -1,
-        e.MOVED_LEFT: -1,
-        e.MOVED_RIGHT: -1,
-        e.MOVED_UP: -1,
-        #VALID_ACTION: -2,
-        COIN_CHASER: 1.5,
-        MOVED_OUT_OF_DANGER: 5,
-        STAYED_NEAR_BOMB: -5,
-        MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 5,   #2
-        e.COIN_FOUND: 1,
-        CRATE_CHASER: 0.5,
-        BOMB_NEXT_TO_CRATE: 2,
-        BOMB_NOT_NEXT_TO_CRATE: -3,
-        BOMB_DESTROYED_NOTHING: -3
-    }
-    reward_sum = 0
-    for event in events:
-        if event in game_rewards:
-            #print(event)
-            reward_sum += game_rewards[event]
-    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
-    #print(reward_sum)
-    return reward_sum
-
-
-
-def aux_events(self, old_game_state, self_action, new_game_state, events):
-
-    # Valid action
-    #if e.INVALID_ACTION not in events  :
-        #events.append(VALID_ACTION)
-
-    # Waiting
-    if self_action == "WAIT":
-        events.append(WAITING_EVENT)
-    
-    # get positions of the player in old state and new state (tuples (x,y) in this case)
-    old_player_coor = old_game_state['self'][3]     
-    new_player_coor = new_game_state['self'][3]
-        
- 
-    #define event coin_chaser
-    coin_coordinates = old_game_state['coins']      #get coin coordinates(also tuples in form (x,y))
-    if len(coin_coordinates) != 0:                  #now calculate distance to all coins in respect to...
-        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1) #...old player position
-        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1) #...new player position
-
-        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-            events.append(COIN_CHASER)                          # -> reward
-
-    
-    #define events with bombs
-    old_bomb_coors = old_game_state['bombs']    #get bomb coordinates (careful: timer still included: ((x,y),t)) for each bomb)
-
-    dangerous_tiles = []                        #this array will store all tuples with 'dangerous' tile coordinates
-    for bomb in old_bomb_coors:
-        for coor in self.exploding_tiles_map[bomb[0]]:      #for each bomb get all tiles that explode with that bomb...
-            dangerous_tiles.append(coor)                    ##... and append them to dangerous_tiles
-
-
-    if dangerous_tiles != []:
-
-        #event in case the agent sucsessfully moved away from a dangerous tile -> reward     
-        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
-            events.append(MOVED_OUT_OF_DANGER)
-
-        #event in case agent stayed on a dangerous tile -> penalty
-        if old_player_coor in dangerous_tiles and ("WAITED" in events or "INVALID_ACTION" in events):
-            events.append(STAYED_NEAR_BOMB)
-        
-        #event in case agent moved onto a dangerous tile -> penalty
-        if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
-            events.append(MOVED_INTO_DANGER)
-
-    #if bombs destroyed nothing
-    if 'BOMB_EXPLODED' in events:                   #a bomb placed by our agent exploded
-        if 'CRATE_DESTROYED' not in events:         #no crate got destroyed (in the future also include:no enemy got bombed)
-            #print(BOMB_DESTROYED_NOTHING)
-            events.append(BOMB_DESTROYED_NOTHING)   # -> penalty
-    
-    
-    #define crate chaser: the agent gets rewarded if he moves closer to crates ONLY if he currently has a bomb
-    field = old_game_state['field']
-    rows,cols = np.where(field == 1)
-    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
-    old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
-    new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
-
-    if old_crate_distance.size > 0:                 #if agent moved closer to the nearest crate and BOMB action is possible 
-        if min(new_crate_distance) < min(old_crate_distance) and old_game_state['self'][2]: 
-            #print(CRATE_CHASER)
-            events.append(CRATE_CHASER)
-        
-        
-    #define event for bomb next to crate
-        if self_action == 'BOMB' and e.INVALID_ACTION not in events:                                       #if bomb is placed...
-            #if min(old_crate_distance) == 1:    # ... give reward for each crate neighbouring bomb position                   
-                #events.append(BOMB_NEXT_TO_CRATE)   
-            for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
-                events.append(BOMB_NEXT_TO_CRATE)                   
-            if len(np.where(old_crate_distance==1)[0]) == 0 :                                                       #bomb is not placed next to crate
-                events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
-                #print(BOMB_NOT_NEXT_TO_CRATE)
-
