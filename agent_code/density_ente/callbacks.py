@@ -77,30 +77,135 @@ def act(self, game_state: dict) -> str:
 def state_to_features(game_state: dict) -> np.array:
     
     player = np.array(game_state['self'][3])
-    
-    low_half = np.array(list(product(np.arange(0, player[0]), np.arange(0,17))), dtype = object)
-   
-    up_half = np.array(list(product(np.arange(player[0], 17), np.arange(0,17))), dtype = object)
-    
-    left_half = np.array(list(product(np.arange(0, 17), np.arange(0,player[1]))), dtype = object)
-    
-    right_half = np.array(list(product(np.arange(0, 17), np.arange(player[1], 17))), dtype = object)
 
-    segments = np.array([low_half, up_half, left_half, right_half])
+    neighbor_pos = get_neighbor_pos(player)
+    
+    left_half =  np.array([[0, player[0]], [0, 17]]) #np.array(list(product(np.arange(0, player[0]), np.arange(0,17))), dtype = object)
+   
+    right_half = np.array([[player[0], 17], [0, 17]]) #np.array(list(product(np.arange(player[0], 17), np.arange(0,17))), dtype = object)
+    
+    up_half = np.array([[0, 17], [0, player[1]]])  #np.array(list(product(np.arange(0, 17), np.arange(0,player[1]))), dtype = object)
+    
+    low_half = np.array([[0, 17], [player[1], 17]])  #np.array(list(product(np.arange(0, 17), np.arange(player[1], 17))), dtype = object)
+
+    segments = np.array([up_half, low_half, left_half, right_half])
     
     field = game_state['field']
 
     coins = np.array(game_state['coins'])
 
-    get_coin_density(segments, coins)
+    #get_coin_density(segments, coins)
 
-def get_coin_density(segments, coins):
+    get_crate_dist(field, player, segments)
+    #print(low_half)
+
+
+def get_neighbor_pos(player):
+    #positions of neigboring tiles in the order (UP, DOWN, LEFT, RIGHT)
+    neighbor_pos = []
+    neighbor_pos.append((player[0], player[1] - 1))
+    neighbor_pos.append((player[0], player[1] + 1))
+    neighbor_pos.append((player[0] - 1, player[1]))
+    neighbor_pos.append((player[0] + 1, player[1]))
     
-    for segment in segments:
-        print(np.shape(segment))
-        print(np.shape(coins[:,None,:]))
-        coins_num = np.where(np.sum(np.abs(segment-coins[:,None,:]), axis = 2)==0)
-        print(np.sum(np.abs(segment-coins[:,None,:]), axis = 2))
-        print(coins_num)
+    return np.array(neighbor_pos)
 
-        #np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0)WS
+def get_coin_dist(game_state, neighbor_pos, player, segments):
+    
+    #converting positions of coins
+    position_coins = np.array(game_state['coins'])
+    #print("position Coins:",position_coins)
+    # distance from coins to player
+    if position_coins.size > 0:
+        distances = []
+
+        for segment in segments:
+
+            maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
+            
+            coins_in_segment = np.where((position_coins[:,0] > segment[0,0]) & (position_coins[:, 0] < segment[0,1]) & (position_coins[:, 1] > segment[1,0]) & (position_coins[:,0] < segment[1,1]))
+            
+            if len(coins_in_segment[0]) == 0:
+                distances.append(0)
+                continue
+            
+            d_coins = np.subtract(position_coins[coins_in_segment[0]], player)   
+        
+            dist_norm = np.linalg.norm(d_coins, axis = 1)
+        
+            dist_closest = maximum_dist / (1 + min(dist_norm))
+            distances.append(dist_closest)
+        
+            '''#find direction to go for closest coin:
+            d_coins_neighbor = np.subtract(neighbor_pos, closest_coin)
+            
+            #finding the direction that brings us closer the closest coin
+            closest_neighbor = np.linalg.norm(d_coins_neighbor, axis = 1)
+            priority_index = np.argsort(closest_neighbor)'''
+
+        return distances
+
+    distances = []
+    return distances
+
+def get_player_prio(game_state, neighbor_pos, player):
+    
+    #getting position of other players from state:
+    other_position = []
+    for i in range(len(game_state['others'])):
+        other_position.append([game_state['others'][i][3][0], game_state['others'][i][3][1]])
+    other_position = np.array(other_position)
+    
+    distances = []
+    
+    # distance from others to player
+    if other_position.size > 0:
+        for segment in segments:
+
+            maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
+            
+            others_in_segment = np.where((other_position[:,0] > segment[0,0]) & (other_position[:, 0] < segment[0,1]) & (other_position[:, 1] > segment[1,0]) & (other_position[:,0] < segment[1,1]))
+            
+            if len(others_in_segment[0]) == 0:
+                distances.append(0)
+                continue
+            
+            d_others = np.subtract(other_position[others_in_segment[0]], player)   
+        
+            dist_norm = np.linalg.norm(d_others, axis = 1)
+        
+            dist_closest = maximum_dist / (1 + min(dist_norm))
+            distances.append(dist_closest)
+
+        return distances, other_position
+    
+    return distances, other_position
+
+def get_crate_dist(field, player, segments):
+
+    crates_position = np.array([np.where(field == 1)[0], np.where(field == 1)[1]]).T
+    
+    distances = []
+    
+    # distance from crates to player
+    if crates_position.size > 0:
+        for segment in segments:
+
+            maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
+            
+            crates_in_segment = np.where((crates_position[:,0] > segment[0,0]) & (crates_position[:, 0] < segment[0,1]) & (crates_position[:, 1] > segment[1,0]) & (crates_position[:,0] < segment[1,1]))
+            
+            if len(crates_in_segment[0]) == 0:
+                distances.append(0)
+                continue
+            
+            d_crates = np.subtract(crates_position[crates_in_segment[0]], player)   
+        
+            dist_norm = np.linalg.norm(d_crates, axis = 1)
+        
+            dist_closest = maximum_dist / (1 + min(dist_norm))
+            distances.append(dist_closest)
+        
+        return distances, crates_position
+    
+    return distances, crates_position
