@@ -1,4 +1,4 @@
- from collections import deque
+from collections import deque
 from random import shuffle
 
 import numpy as np

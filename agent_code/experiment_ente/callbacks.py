@@ -7,7 +7,6 @@ import numpy as np
 from itertools import product
 from collections import deque
 
-
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 
 
@@ -51,7 +50,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.75
+    else: random_prob = 0.7
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -67,12 +66,49 @@ def act(self, game_state: dict) -> str:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
+        #print(feature_vector)
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        #print(move)
         return move
         
     self.logger.debug("Querying model for action.")
     return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
+
+def state_to_features(game_state):
+    if game_state is None:
+        return 
+    dist=7
+    field=-np.ones((2*dist+1,2*dist+1))
+    me=game_state["self"][3]
+    xmin=max(me[0]-dist,0)      #magic
+    ymin=max(me[1]-dist,0)
+    xmax=min(me[0]+dist+1,17)   #more CoOrDs
+    ymax=min(me[1]+dist+1,17)
+    fieldxmin=max(dist-me[0],0) #random maxmins
+    fieldymin=max(dist-me[1],0)
+    fieldxmax=min(17+dist-me[0],2*dist+1)
+    fieldymax=min(17+dist-me[1],2*dist+1)
+    bombs=game_state["bombs"]
+    others=game_state["others"]
+    newfield=np.zeros((17,17))
+    coins=game_state["coins"]
+    for coin in coins:     
+        newfield[coin]=10
+    for other in others:
+        newfield[other[3]]=2
+    for bomb in bombs:
+        newfield[bomb[0]]=-5+bomb[1] #some calculation
+    field[fieldxmin:fieldxmax,fieldymin:fieldymax]=(game_state["field"]+newfield)[xmin:xmax,ymin:ymax]      #MoRe InDeXaTiOn
+    #print(field.T)
+    return field.reshape(1,-1)[0]
+
+
+
+
+
+
+'''
 
 def state_to_features(game_state: dict) -> np.array:
     """
@@ -99,7 +135,7 @@ def state_to_features(game_state: dict) -> np.array:
     #describing field of agent:
     player_tile = np.zeros(2)
     
-    '''finding positions of coins, bombs, dangerous tiles, crates and walls'''
+    #finding positions of coins, bombs, dangerous tiles, crates and walls
 
     #get player position:
     player = np.array(game_state['self'][3])
@@ -108,7 +144,7 @@ def state_to_features(game_state: dict) -> np.array:
     explosion_map = game_state['explosion_map']
 
     #getting bomb position from state 
-    '''try to vectorize'''
+    #try to vectorize
     bomb_position = get_bomb_position(game_state)
     
     #positions of neighboring tiles in the order (UP, DOWN, LEFT, RIGHT)
@@ -128,7 +164,7 @@ def state_to_features(game_state: dict) -> np.array:
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
 
 
-    '''filling neighboring tiles with values characterizing the direction'''
+    #filling neighboring tiles with values characterizing the direction
 
         
 
@@ -370,8 +406,4 @@ def get_tile_prio(tile,neighbors):
 
     return priority_index
 
-
-
-    
-
-
+'''
