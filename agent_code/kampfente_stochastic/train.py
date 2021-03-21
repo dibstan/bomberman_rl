@@ -17,7 +17,7 @@ ALPHA = 0.01     # learning rate
 GAMMA = 0.01     # discount rate
 KAPPA = 0.0     # adaption konstant for learning rate (if set to zero -> konstant learning rate)
 N = 5   # N step temporal difference
-CLIP = 10   # initial clip value
+CLIP = 20   # initial clip value
 N_CLIPPER = np.inf      # number of fluctuations considering in auto clipping
 
 # Auxillary events
@@ -302,7 +302,7 @@ def n_step_TD(self, n):
         self.model[action] = self.model[action] + self.learning_rate * GRADIENT   # updating the model for the relevant action
         #print(self.model)
 
-        '''# Train with augmented data
+        # Train with augmented data
         #update with horizontally shifted state:
         hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
         self.model[hshift_action] = hshift_model_update
@@ -321,7 +321,7 @@ def n_step_TD(self, n):
 
         #update with turn around:
         fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
-        self.model[fullturn_action] = fullturn_model_update'''
+        self.model[fullturn_action] = fullturn_model_update
 
 
 
@@ -339,39 +339,19 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
     Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
 
     GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
-    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -10,10)   # updating the model for the relevant action
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip,self.clip)   # updating the model for the relevant action
 
     return model_update, shift_action
 
 
-
-def vertical_shift(state, action):
-    #initializing the shifted state:
-    shifted_state = np.copy(state)
-
-    #shifting up to down:
-    shifted_state[12:18] = state[18:24]
-    shifted_state[18:24] = state[12:18]
-
-    #shifting actions
-    if action == "UP":
-        new_action = "DOWN"
-    
-    elif action == "DOWN":
-        new_action = "UP"
-
-    else:
-        new_action = action
-
-    return shifted_state, new_action
 
 def horizontal_shift(state, action):
     #initializing the shifted state:
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:6] = state[6:12]
-    shifted_state[6:12] = state[0:6]
+    shifted_state[18:27] = state[27:36]
+    shifted_state[27:36] = state[18:27]
 
     #shifting actions
     if action == "LEFT":
@@ -385,18 +365,69 @@ def horizontal_shift(state, action):
 
     return shifted_state, new_action
 
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[0:9] = state[9:18]
+    shifted_state[9:18] = state[0:9]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_right(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+    
+    #up -> left 
+    turned_state[0:9] = state[18:27]
+    #down -> right
+    turned_state[9:18] = state[27:36]
+    #right -> up
+    turned_state[18:27] = state[9:18]
+    #left -> down
+    turned_state[27:36] = state[0:9]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'UP'
+    
+    elif action == 'RIGHT':
+        new_action = 'DOWN'
+
+    elif action == 'DOWN':
+        new_action = 'LEFT'
+    
+    elif action == 'UP':
+        new_action = 'RIGHT'
+
+    else:
+        new_action = action
+    
+    return turned_state, new_action
+
 def turn_left(state, action):
     #initializing the turned state:
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:6] = state[12:18]
+    turned_state[0:9] = state[27:36]
     #down -> right
-    turned_state[6:12] = state[18:24]
+    turned_state[9:18] = state[18:27]
     #right -> up
-    turned_state[12:18] = state[6:12]
+    turned_state[18:27] = state[0:9]
     #left -> down
-    turned_state[18:24] = state[0:6]
+    turned_state[27:36] = state[9:18]
 
     #shifting actions
     if action == 'LEFT':
@@ -410,37 +441,6 @@ def turn_left(state, action):
     
     elif action == 'UP':
         new_action = 'LEFT'
-
-    else:
-        new_action = action
-
-    return turned_state, new_action
-
-def turn_right(state, action):
-    #initializing the turned state:
-    turned_state = np.copy(state)
-
-    #up -> left 
-    turned_state[0:6] = state[18:24]
-    #down -> right
-    turned_state[6:12] = state[12:18]
-    #right -> up
-    turned_state[12:18] = state[0:6]
-    #left -> down
-    turned_state[18:24] = state[6:12]
-
-    #shifting actions
-    if action == 'LEFT':
-        new_action = 'UP'
-    
-    elif action == 'RIGHT':
-        new_action = 'DOWN'
-
-    elif action == 'DOWN':
-        new_action = 'LEFT'
-    
-    elif action == 'UP':
-        new_action = 'RIGHT'
 
     else:
         new_action = action
