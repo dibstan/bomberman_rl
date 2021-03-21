@@ -17,7 +17,7 @@ ALPHA = 0.01    # learning rate
 GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
 CLIP = 10   # initial clip value
-N_CLIPPER = 50      # number of fluctuations considering in auto clipping
+N_CLIPPER = np.inf      # number of fluctuations considering in auto clipping
 
 
 
@@ -32,6 +32,8 @@ CRATE_CHASER = 'CRATE_CHASER'
 BOMB_NEXT_TO_CRATE = 'BOMB_NEXT_TO_CRATE'
 BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
 BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
+OPPONENT_CHASER = 'CHASED_OPPONENT'
+DROPPED_BOMB_NEXT_TO_ENEMY = 'DROPPED_BOMB_CLOSE_TO_ENEMY'
 #LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 
@@ -129,26 +131,28 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 20,
-        e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -80,
-        WAITING_EVENT: -3,
-        e.INVALID_ACTION: -7,
+        e.COIN_COLLECTED: 15,
+        e.KILLED_OPPONENT: 50,
+        e.KILLED_SELF: -100,
+        WAITING_EVENT: -4,
+        e.INVALID_ACTION: -8,
         e.MOVED_DOWN: -1,
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
         e.MOVED_UP: -1,
         #VALID_ACTION: -2,
-        COIN_CHASER: 4,
+        COIN_CHASER: 4.5,
+        OPPONENT_CHASER: 1.5,
         MOVED_OUT_OF_DANGER: 5,
-        STAYED_NEAR_BOMB: -5,
+        STAYED_NEAR_BOMB: -7,
         MOVED_INTO_DANGER: -5,
         e.CRATE_DESTROYED: 5,   #2
         e.COIN_FOUND: 1,
-        CRATE_CHASER: 0.5,
+        CRATE_CHASER: 1.5,
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
-        BOMB_DESTROYED_NOTHING: -3
+        BOMB_DESTROYED_NOTHING: -3,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 5
     }
     reward_sum = 0
     for event in events:
@@ -181,8 +185,24 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1) #...new player position
 
         if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-            events.append(COIN_CHASER)                          # -> reward
+            events.append(OPPONENT_CHASER)                          # -> reward
 
+
+    #define event coin_chaser
+    #getting position of other players from state:
+    other_position = []
+    for i in range(len(old_game_state['others'])):
+        other_position.append([old_game_state['others'][i][3][0], old_game_state['others'][i][3][1]])
+    other_position = np.array(other_position)
+
+         #get coin coordinates(also tuples in form (x,y))
+    if len(other_position) != 0:                  #now calculate distance to all coins in respect to...
+        old_other_distances = np.linalg.norm(np.subtract(other_position, old_player_coor), axis=1) #...old player position
+        new_other_distances = np.linalg.norm(np.subtract(other_position, new_player_coor), axis=1) #...new player position
+
+        if min(new_other_distances) < min(old_other_distances):   #if the distance to closest coin got smaller
+            events.append(CRATE_CHASER)
+    
     
     #define events with bombs
     old_bomb_coors = old_game_state['bombs']    #get bomb coordinates (careful: timer still included: ((x,y),t)) for each bomb)
@@ -237,6 +257,11 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
                 #print(BOMB_NOT_NEXT_TO_CRATE)
 
+            #new
+            if len(old_game_state['others']) !=0:
+                for others_coor in old_game_state['others']:
+                    if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <= 3:
+                        events.append(DROPPED_BOMB_NEXT_TO_ENEMY)
 
 
 
