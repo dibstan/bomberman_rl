@@ -50,7 +50,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.0
+    else: random_prob = 0.8
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -70,7 +70,7 @@ def act(self, game_state: dict) -> str:
         return move
         
     self.logger.debug("Querying model for action.")
-    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,0.1])
+    return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -134,9 +134,6 @@ def state_to_features(game_state: dict) -> np.array:
     if len(bomb_position) != 0:
         bomb_distances = np.linalg.norm(np.subtract(bomb_position, player) , axis = 1)
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
-
-
-    '''filling neighboring tiles with values characterizing the direction'''
 
         
 
@@ -316,14 +313,18 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
         for tile in dangerous_tiles:
             if field[tile[0],tile[1]] == 0: field[tile[0],tile[1]]=2 
 
-    neighbors = get_neighbor_pos(player_pos)
+    for enemy in game_state['others']:                                          #since other players block moement, look at them as walls
+        field[enemy[3][0],enemy[3][1]] = 1
     
+    history = []
     q = deque()
     q.append(player_pos)
 
     while len(q) > 0:
 
         pos = q.popleft()
+        history.append(pos)
+
         neighbors = get_neighbor_pos(pos)
 
         for neighbor in neighbors:
@@ -333,10 +334,9 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
                 return closest_tile
 
             if field[neighbor[0], neighbor[1]] == 2:                            #check if neighbor is wall or crate, if not...
-                if np.any(np.sum(np.abs(np.array(q)-neighbor), axis=1) == 0):   # if neighbor is already in the q, dont append
-                    continue
-                else:                                                           # neighbor is not yet in q
-                    q.append(neighbor)
+                if not np.any(np.sum(np.abs(history - neighbor), axis=1) == 0): # if neighbor is already in the q, dont append
+                    q.append(neighbor)                                          # neighbor is not yet in q
+                    history.append(neighbor)
 
             else:
                 continue
@@ -373,7 +373,6 @@ def get_coin_dist(game_state, segments, player):
         
             dist_norm = np.linalg.norm(d_coins, axis = 1)
             #print('dist\n',dist_norm)
-        
             dist_closest = np.sum(maximum_dist / (1 + dist_norm))
             #dist_closest = maximum_dist / (1 + min(dist_norm))
             #print('dist ratio\n',maximum_dist / (1 + dist_norm))
