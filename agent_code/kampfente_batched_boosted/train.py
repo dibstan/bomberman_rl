@@ -306,7 +306,7 @@ def experience_replay(self, n):
             else:
                 Q_TD = np.dot(rewards,discount)
 
-            print(action, rewards, Q_TD)
+            #print(action, rewards, Q_TD)
             #print(action, Q_TD, Q)
 
             # updating the model
