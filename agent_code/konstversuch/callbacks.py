@@ -50,7 +50,8 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.9
+    else: random_prob = 0.2
+
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -68,6 +69,7 @@ def act(self, game_state: dict) -> str:
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        #print(move)
         return move
         
     self.logger.debug("Querying model for action.")
@@ -108,7 +110,7 @@ def state_to_features(game_state: dict) -> np.array:
     
     #get field values
     field = np.array(game_state['field'])
-    
+    print(np.shape(field))
     #get explosion map (remeber: explosions last for 2 steps)
     explosion_map = game_state['explosion_map']
 
@@ -428,3 +430,5 @@ def get_segments(player):
     segments = np.array([up_half, low_half, left_half, right_half])
 
     return segments
+
+    
