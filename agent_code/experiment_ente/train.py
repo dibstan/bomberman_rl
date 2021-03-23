@@ -32,6 +32,7 @@ CRATE_CHASER = 'CRATE_CHASER'
 BOMB_NEXT_TO_CRATE = 'BOMB_NEXT_TO_CRATE'
 BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
 BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
+DROPPED_BOMB_NEAR_ENEMY = 'DROPPED_BOMB_NEAR_ENEMY'
 DROPPED_BOMB_NEXT_TO_ENEMY ='DROPPED_BOMB_NEXT_TO_ENEMY'
 #LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
@@ -242,8 +243,8 @@ def horizontal_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[18:27] = state[27:36]
-    shifted_state[27:36] = state[18:27]
+    shifted_state[20:30] = state[30:40]
+    shifted_state[30:40] = state[20:30]
 
     #shifting actions
     if action == "LEFT":
@@ -262,8 +263,8 @@ def vertical_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:9] = state[9:18]
-    shifted_state[9:18] = state[0:9]
+    shifted_state[0:10] = state[10:20]
+    shifted_state[10:20] = state[0:10]
 
     #shifting actions
     if action == "UP":
@@ -282,13 +283,13 @@ def turn_right(state, action):
     turned_state = np.copy(state)
     
     #up -> left 
-    turned_state[0:9] = state[18:27]
+    turned_state[0:10] = state[20:30]
     #down -> right
-    turned_state[9:18] = state[27:36]
+    turned_state[10:20] = state[30:40]
     #right -> up
-    turned_state[18:27] = state[9:18]
+    turned_state[20:30] = state[10:20]
     #left -> down
-    turned_state[27:36] = state[0:9]
+    turned_state[30:40] = state[0:10]
 
     #shifting actions
     if action == 'LEFT':
@@ -313,13 +314,13 @@ def turn_left(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:9] = state[27:36]
+    turned_state[0:10] = state[30:40]
     #down -> right
-    turned_state[9:18] = state[18:27]
+    turned_state[10:20] = state[20:30]
     #right -> up
-    turned_state[18:27] = state[0:9]
+    turned_state[20:30] = state[0:10]
     #left -> down
-    turned_state[27:36] = state[9:18]
+    turned_state[30:40] = state[10:20]
 
     #shifting actions
     if action == 'LEFT':
@@ -376,6 +377,7 @@ def reward_from_events(self, events: List[str]) -> int:
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         #BOMB_DESTROYED_NOTHING: -3,
+        DROPPED_BOMB_NEAR_ENEMY: 2,
         DROPPED_BOMB_NEXT_TO_ENEMY: 5 
 
     }
@@ -469,4 +471,6 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 for others_coor in old_game_state['others']:
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
                         #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+                        events.append(DROPPED_BOMB_NEAR_ENEMY)
+                    if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:
                         events.append(DROPPED_BOMB_NEXT_TO_ENEMY)

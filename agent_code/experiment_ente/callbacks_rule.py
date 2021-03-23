@@ -250,7 +250,7 @@ def state_to_features(game_state: dict) -> np.array:
         return None
 
     #creating channels for one-hot encoding
-    channels = np.zeros((4,9))
+    channels = np.zeros((4,10))
     
     #describing field of agent:
     player_tile = np.zeros(2)
@@ -276,9 +276,10 @@ def state_to_features(game_state: dict) -> np.array:
     #getting position of coins and distance of neighboring tiles
     dist_coins, position_coins = get_coin_dist(game_state, segments, player)
 
+    #'''
     #getting position of other players and distance
     dist_others, other_position = get_player_dist(game_state, segments, player)
-
+    #'''
     #getting position of crates and distance
     dist_crates, crates_position = get_crate_dist(field, segments, player)
 
@@ -317,12 +318,23 @@ def state_to_features(game_state: dict) -> np.array:
         for i in range(len(dist_coins)):
             if channels[i][0] != 1 and channels[i][1] != 1:
                 channels[i][4] = dist_coins[i]
+    
+    if len(game_state['others']) != 0:
+        for other in game_state['others']:
+            for i in range(4):
+                #print('neighbro',neighbor_pos[i])
+                #print('other',np.array(other[3]))
+                if np.linalg.norm(np.array(other[3])-neighbor_pos[i])==0:
+                    channels[i,9] == 1
+                    #print('yes')
 
+    
     #describing distance to other players
     if other_position.size > 0:
         for i in range(len(dist_others)):
             if channels[i][0] != 1 and channels[i][1] != 1:
                 channels[i][6] = dist_others[i]
+    
 
     #describing distance to crates
     if crates_position.size > 0:
