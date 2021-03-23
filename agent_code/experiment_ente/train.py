@@ -377,8 +377,8 @@ def reward_from_events(self, events: List[str]) -> int:
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         #BOMB_DESTROYED_NOTHING: -3,
-        DROPPED_BOMB_NEAR_ENEMY: 2,
-        DROPPED_BOMB_NEXT_TO_ENEMY: 5 
+        DROPPED_BOMB_NEAR_ENEMY: 7,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 20 
 
     }
     reward_sum = 0
@@ -472,5 +472,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
                         #print(DROPPED_BOMB_NEXT_TO_ENEMY)
                         events.append(DROPPED_BOMB_NEAR_ENEMY)
+                        #print('near')
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:
                         events.append(DROPPED_BOMB_NEXT_TO_ENEMY)
+                        #print(DROPPED_BOMB_NEXT_TO_ENEMY)
