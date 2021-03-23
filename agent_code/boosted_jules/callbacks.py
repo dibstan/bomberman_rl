@@ -423,8 +423,8 @@ def get_coin_dist(game_state, segments, player):
             dist_norm = np.linalg.norm(d_coins, axis = 1)
             #print('dist\n',dist_norm)
         
-            dist_closest = np.sum(maximum_dist / (1 + dist_norm))
-            #dist_closest = maximum_dist / (1 + min(dist_norm))
+            #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
+            dist_closest = maximum_dist / (1 + min(dist_norm))
             #print('dist ratio\n',maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
 

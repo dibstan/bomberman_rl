@@ -77,8 +77,20 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         # Adding auxillary Events
         aux_events(self, old_game_state, self_action, new_game_state, events)
         #print(events, reward_from_events(self,events))
-
-
+        '''
+        state = state_to_features(new_game_state)
+        j=2
+        k=4
+        coins_neighbors = []
+        priority_neighbor = []
+        for i in range(4):
+            coins_neighbors.append(state[j])
+            priority_neighbor.append(state[k])
+            k+=9
+            j+=9
+        print('on neighbors:',coins_neighbors)
+        print('prios:       ',priority_neighbor)
+        '''
         # Adding the last move to the transition cache
         self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
     
@@ -191,6 +203,18 @@ def n_step_TD(self, n):
             #update with turn around:
             fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
             self.model[fullturn_action] = fullturn_model_update
+
+
+
+def Q_func(self, state):
+    '''
+        input: self, state
+        output: Q value of the best action
+    '''
+
+    vec_model = np.array(list(self.model.values()))     # vectorizing the model dict
+    
+    return np.max(np.dot(vec_model, state))             # return the max Q value
 
 
 def feature_augmentation(self, aug_direction, first_state, last_state, action, disc, n_future_rew, n):
@@ -326,17 +350,6 @@ def turn_around(state, action):
 
 
 
-def Q_func(self, state):
-    '''
-        input: self, state
-        output: Q value of the best action
-    '''
-
-    vec_model = np.array(list(self.model.values()))     # vectorizing the model dict
-    
-    return np.max(np.dot(vec_model, state))      # return the max Q value
-
-
 def reward_from_events(self, events: List[str]) -> int:
     '''
         Input: self, list of events
@@ -344,7 +357,7 @@ def reward_from_events(self, events: List[str]) -> int:
     '''
     game_rewards = {
         e.COIN_COLLECTED: 20,
-        e.KILLED_OPPONENT: 5,
+        e.KILLED_OPPONENT: 20,
         e.KILLED_SELF: -80,
         WAITING_EVENT: -3,
         e.INVALID_ACTION: -7,
@@ -357,13 +370,14 @@ def reward_from_events(self, events: List[str]) -> int:
         MOVED_OUT_OF_DANGER: 5,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 5,   #2
-        e.COIN_FOUND: 1,
+        #e.CRATE_DESTROYED: 5,   #2
+        #e.COIN_FOUND: 1,
         CRATE_CHASER: 2,
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         #BOMB_DESTROYED_NOTHING: -3,
-        DROPPED_BOMB_NEXT_TO_ENEMY: 5
+        DROPPED_BOMB_NEXT_TO_ENEMY: 5 
+
     }
     reward_sum = 0
     for event in events:
@@ -454,4 +468,5 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
             if len(old_game_state['others']) !=0:
                 for others_coor in old_game_state['others']:
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
+                        #print(DROPPED_BOMB_NEXT_TO_ENEMY)
                         events.append(DROPPED_BOMB_NEXT_TO_ENEMY)

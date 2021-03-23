@@ -50,7 +50,7 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 0.8
+    else: random_prob = 0.9
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -65,8 +65,11 @@ def act(self, game_state: dict) -> str:
     if not self.train: 
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
         betas = np.array(list(self.model.values()))
+        #print(betas)
         feature_vector = np.array(state_to_features(game_state))
+        #print(feature_vector)
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        #print(move)
         return move
         
     self.logger.debug("Querying model for action.")
@@ -98,9 +101,6 @@ def state_to_features(game_state: dict) -> np.array:
     #describing field of agent:
     player_tile = np.zeros(2)
 
-    
-    
-    '''finding positions of coins, bombs, dangerous tiles, crates and walls'''
 
     #get player position:
     player = np.array(game_state['self'][3])
@@ -112,11 +112,12 @@ def state_to_features(game_state: dict) -> np.array:
     explosion_map = game_state['explosion_map']
 
     #getting bomb position from state 
-    '''try to vectorize'''
+   
     bomb_position = get_bomb_position(game_state)
     
     #positions of neighboring tiles in the order (UP, DOWN, LEFT, RIGHT)
     neighbor_pos = get_neighbor_pos(player)
+    #print('neighbors : ',neighbor_pos)
     
     #getting segments
     segments = get_segments(player)
@@ -373,8 +374,9 @@ def get_coin_dist(game_state, segments, player):
         
             dist_norm = np.linalg.norm(d_coins, axis = 1)
             #print('dist\n',dist_norm)
-            dist_closest = np.sum(maximum_dist / (1 + dist_norm))
-            #dist_closest = maximum_dist / (1 + min(dist_norm))
+            #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
+            #dist_closest  =  len(dist_norm)/len(position_coins)
+            dist_closest = maximum_dist / (1 + min(dist_norm))
             #print('dist ratio\n',maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
 
@@ -405,7 +407,10 @@ def get_crate_dist(field, segments, player):
         
             dist_norm = np.linalg.norm(d_crates, axis = 1)
         
-            dist_closest = np.sum(maximum_dist / (1 + dist_norm))
+
+            dist_closest  =  len(dist_norm)/len(crates_position)
+            #dist_closest = maximum_dist / (1 + min(dist_norm))
+            #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
         
         return distances, crates_position
