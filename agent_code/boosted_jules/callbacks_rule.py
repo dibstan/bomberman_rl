@@ -2,6 +2,8 @@ from collections import deque
 from random import shuffle
 import random
 import numpy as np
+import pickle 
+
 
 
 def look_for_targets(free_space, start, targets, logger=None):
@@ -71,6 +73,9 @@ def setup(self):
     # While this timer is positive, agent will not hunt/attack opponents
     self.ignore_others_timer = 0
     self.current_round = 0
+    with open('explosion_map.pt', 'rb') as file:
+        global exploding_tiles_map
+        exploding_tiles_map = pickle.load(file)
 
 
 def reset_self(self):
@@ -88,7 +93,7 @@ def act(self, game_state):
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
     what it contains.
     """
-    random_prob = 0.5
+    random_prob = 0.2
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -559,8 +564,8 @@ def get_coin_dist(game_state, segments, player):
         
             dist_norm = np.linalg.norm(d_coins, axis = 1)
             #print('dist\n',dist_norm)
-        
-            dist_closest = np.sum(maximum_dist / (1 + dist_norm))
+            dist_closest = len(dist_norm)/len(position_coins)
+            #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
             #dist_closest = maximum_dist / (1 + min(dist_norm))
             #print('dist ratio\n',maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
@@ -591,8 +596,9 @@ def get_crate_dist(field, segments, player):
             d_crates = np.subtract(crates_position[crates_in_segment[0]], player)   
         
             dist_norm = np.linalg.norm(d_crates, axis = 1)
-        
-            dist_closest = np.sum(maximum_dist / (1 + dist_norm))
+
+            dist_closest = len(dist_norm)/len(crates_position)
+            #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
         
         return distances, crates_position
@@ -611,4 +617,5 @@ def get_segments(player):
     segments = np.array([up_half, low_half, left_half, right_half])
 
     return segments
+
  
