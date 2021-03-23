@@ -50,7 +50,8 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 0.
+    random_prob = 0.5
+
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -65,7 +66,7 @@ def act(self, game_state: dict) -> str:
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
-        #print(move)
+        #print(betas)
         return move 
     self.logger.debug("Querying model for action.")
     return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
@@ -101,7 +102,10 @@ def state_to_features(game_state: dict) -> np.array:
 
     #get player position:
     player = np.array(game_state['self'][3])
-    
+
+    #get field values
+    field = game_state['field']
+
     #get explosion map (remeber: explosions last for 2 steps)
     explosion_map = game_state['explosion_map']
 
@@ -117,7 +121,6 @@ def state_to_features(game_state: dict) -> np.array:
 
     #getting position of other players and direction
     other_position, others_index, index_closest = get_player_prio(game_state, neighbor_pos, player)
-
 
 
     #searching for near bombs:
@@ -157,8 +160,15 @@ def state_to_features(game_state: dict) -> np.array:
     #describing priority: 
     if position_coins.size > 0:
         for i in range(len(priority_index)):
-            if channels[priority_index[i]][0] != 1:
+            if channels[priority_index[i]][0] != 1 and channels[priority_index[i]][1] != 1:
                 channels[priority_index[i]][4] = 1
+                break
+    
+    else:
+        crates_position, crate_index = get_crate_prio(game_state, neighbor_pos, player, field)
+        for i in range(len(crate_index)):
+            if channels[crate_index[i]][0] != 1:
+                channels[crate_index[i]][4] = 1
                 break
 
     if other_position.size > 0:
@@ -368,3 +378,29 @@ def get_tile_prio(tile,neighbors):
 
     return priority_index
 
+def get_crate_prio(game_state, neighbor_pos, player, field):
+
+    crates_position = np.array([np.where(field == 1)[0], np.where(field == 1)[1]]).T
+    
+    distances = []
+    
+    # distance from crates to player
+    if crates_position.size > 0:
+                
+        d_crates = np.subtract(crates_position, player)   
+    
+        dist_norm = np.linalg.norm(d_crates, axis = 1)
+        
+        closest_crate = crates_position[dist_norm.argmin()]
+        
+        #find direction to go for closest coin:
+        d_crates_neighbor = np.linalg.norm(np.subtract(neighbor_pos, closest_crate), axis = 1)
+        
+        priority_index = np.argsort(d_crates_neighbor)
+        
+        return crates_position, priority_index
+    
+    priority_index = []
+    return crates_position, priority_index
+    
+    

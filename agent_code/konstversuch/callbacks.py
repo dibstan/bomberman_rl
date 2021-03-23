@@ -50,7 +50,8 @@ def act(self, game_state: dict) -> str:
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
     if self.model == None: random_prob = 0
-    else: random_prob = 1
+    else: random_prob = 0.2
+
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -58,6 +59,7 @@ def act(self, game_state: dict) -> str:
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
+        #
         #print(move)
         return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
     
@@ -67,6 +69,7 @@ def act(self, game_state: dict) -> str:
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        #print(move)
         return move
         
     self.logger.debug("Querying model for action.")
@@ -107,7 +110,7 @@ def state_to_features(game_state: dict) -> np.array:
     
     #get field values
     field = np.array(game_state['field'])
-    
+    print(np.shape(field))
     #get explosion map (remeber: explosions last for 2 steps)
     explosion_map = game_state['explosion_map']
 
@@ -166,20 +169,20 @@ def state_to_features(game_state: dict) -> np.array:
     #describing coin distance: 
     if position_coins.size > 0:
         for i in range(len(dist_coins)):
-            if channels[i][0] != 1 and channels[i][1] != 1:
-                channels[i][4] = dist_coins[i]
+            #if channels[i][0] != 1 and channels[i][1] != 1:
+            channels[i][4] = dist_coins[i]
 
     #describing distance to other players
     if other_position.size > 0:
         for i in range(len(dist_others)):
-            if channels[i][0] != 1 and channels[i][1] != 1:
-                channels[i][6] = dist_others[i]
+            #if channels[i][0] != 1 and channels[i][1] != 1:
+           channels[i][6] = dist_others[i]
 
     #describing distance to crates
     if crates_position.size > 0:
         for i in range(len(dist_crates)):
-            if channels[i][0] != 1 and channels[i][1] != 1:
-                channels[i][7] = dist_crates[i]
+            #if channels[i][0] != 1 and channels[i][1] != 1:
+            channels[i][7] = dist_crates[i]
 
     #player on bomb?
     if len(bomb_position)!=0:
@@ -427,3 +430,5 @@ def get_segments(player):
     segments = np.array([up_half, low_half, left_half, right_half])
 
     return segments
+
+    
