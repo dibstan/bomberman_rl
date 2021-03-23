@@ -8,7 +8,7 @@ ROWS = 17
 
 CRATE_DENSITY = 0.75 # original:0.75
 
-MAX_AGENTS = 2
+MAX_AGENTS = 4
 # original: 4
 
 # Round properties
