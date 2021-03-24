@@ -20,10 +20,10 @@ Transition = namedtuple('Transition',
 
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-ALPHA = .3
+ALPHA = .03
 PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
-GAMMA = 0.5     # discount rate
+GAMMA = 0.1     # discount rate
 N = 4   # N step temporal difference
 
 #  Auxillary events
@@ -37,6 +37,8 @@ CRATE_CHASER = 'CRATE_CHASER'
 BOMB_NEXT_TO_CRATE = 'BOMB_NEXT_TO_CRATE'
 BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
 BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
+DROPPED_BOMB_NEAR_ENEMY = 'DROPPED_BOMB_NEAR_ENEMY'
+DROPPED_BOMB_NEXT_TO_ENEMY = 'DROPPED_BOMB_NEXT_TO_ENEMY'
 #LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 def setup_training(self):
@@ -233,10 +235,12 @@ def reward_from_events(self, events: List[str]) -> int:
         MOVED_INTO_DANGER: -5,
         e.CRATE_DESTROYED: 2,   #2
         e.COIN_FOUND: 1,
-        CRATE_CHASER: 0.5,
+        CRATE_CHASER: 2,
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
-        BOMB_DESTROYED_NOTHING: -3
+        DROPPED_BOMB_NEAR_ENEMY: 3,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 10
+        #BOMB_DESTROYED_NOTHING: -3
     }
     reward_sum = 0
     for event in events:
@@ -327,3 +331,13 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
                 #print(BOMB_NOT_NEXT_TO_CRATE)
 
+            #new
+            if len(old_game_state['others']) !=0:
+                for others_coor in old_game_state['others']:
+                    if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
+                        #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+                        events.append(DROPPED_BOMB_NEAR_ENEMY)
+                        #print('near')
+                    if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:
+                        events.append(DROPPED_BOMB_NEXT_TO_ENEMY)
+                        #print(DROPPED_BOMB_NEXT_TO_ENEMY)
