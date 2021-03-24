@@ -34,6 +34,7 @@ BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
 BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
 DROPPED_BOMB_NEAR_ENEMY = 'DROPPED_BOMB_NEAR_ENEMY'
 DROPPED_BOMB_NEXT_TO_ENEMY ='DROPPED_BOMB_NEXT_TO_ENEMY'
+OPPONENT_CHASER = 'OPPONENT_CHASER'
 #LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 
@@ -377,8 +378,10 @@ def reward_from_events(self, events: List[str]) -> int:
         BOMB_NEXT_TO_CRATE: 2,
         BOMB_NOT_NEXT_TO_CRATE: -3,
         #BOMB_DESTROYED_NOTHING: -3,
-        DROPPED_BOMB_NEAR_ENEMY: 7,
-        DROPPED_BOMB_NEXT_TO_ENEMY: 20 
+        DROPPED_BOMB_NEAR_ENEMY: 5,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 20, 
+        OPPONENT_CHASER: 3
+        
 
     }
     reward_sum = 0
@@ -432,6 +435,7 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
 
         #event in case agent stayed on a dangerous tile -> penalty
         if old_player_coor in dangerous_tiles and ("WAITED" in events or "INVALID_ACTION" in events):
+            #print(STAYED_NEAR_BOMB)
             events.append(STAYED_NEAR_BOMB)
         
         #event in case agent moved onto a dangerous tile -> penalty
@@ -467,8 +471,10 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 #print(BOMB_NOT_NEXT_TO_CRATE)
             
             #new
+            enemys = []
             if len(old_game_state['others']) !=0:
                 for others_coor in old_game_state['others']:
+                    enemys.append(others_coor[3])
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
                         #print(DROPPED_BOMB_NEXT_TO_ENEMY)
                         events.append(DROPPED_BOMB_NEAR_ENEMY)
@@ -476,3 +482,16 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:
                         events.append(DROPPED_BOMB_NEXT_TO_ENEMY)
                         #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+
+                #define opponent_chaser
+                distances_old = np.linalg.norm(np.subtract(old_player_coor,enemys),axis=1)
+                distances_new = np.linalg.norm(np.subtract(new_player_coor,enemys),axis=1)
+                if min(distances_new) < min(distances_old):
+                    events.append(OPPONENT_CHASER)
+
+    
+    
+    
+
+     
+    
