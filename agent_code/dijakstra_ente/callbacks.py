@@ -46,78 +46,39 @@ def setup(self):
 
 def act(self, game_state: dict) -> str:
     """
-    Your agent should parse the input, think, and take a decision.
-    When not in training mode, the maximum execution time for this method is 0.5s.
-
     :param self: The same object that is passed to all of your callbacks.
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    #self.logger.info(game_state['bombs'])
-    
-    random_prob = 0.0
+    if self.model == None: random_prob = 0
+    else: random_prob = 0.7
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
-
-        q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
-        for move in self.model:
-            q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
-        move = list(q_value.keys())[np.argmax(list(q_value.values()))]
-        #print(q_value)
-        #print(q_value)
+        betas = np.array(list(self.model.values()))
+        feature_vector = np.array(state_to_features(game_state))
+        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
+        
         #print(move)
-
-        return move
-
-
-    if not self.train:
-        q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
-        for move in self.model:
-            q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
-        move = list(q_value.keys())[np.argmax(list(q_value.values()))]
-        #print(q_value)
+        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
+    
+    #if we just want to play and not overwrite training data
+    if not self.train: 
+        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+        betas = np.array(list(self.model.values()))
+        #print(betas)
+        feature_vector = np.array(state_to_features(game_state))
+        #print(feature_vector[8],feature_vector[18],feature_vector[28],feature_vector[38])
+        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         #print(move)
         return move
-
-
+        
     self.logger.debug("Querying model for action.")
     return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
-'''
 
-def state_to_features(game_state):
-    if game_state is None:
-        return 
-    dist=7
-    field=-np.ones((2*dist+1,2*dist+1))
-    me=game_state["self"][3]
-    xmin=max(me[0]-dist,0)      #magic
-    ymin=max(me[1]-dist,0)
-    xmax=min(me[0]+dist+1,17)   #more CoOrDs
-    ymax=min(me[1]+dist+1,17)
-    fieldxmin=max(dist-me[0],0) #random maxmins
-    fieldymin=max(dist-me[1],0)
-    fieldxmax=min(17+dist-me[0],2*dist+1)
-    fieldymax=min(17+dist-me[1],2*dist+1)
-    bombs=game_state["bombs"]
-    others=game_state["others"]
-    newfield=np.zeros((17,17))
-    coins=game_state["coins"]
-    explosion_map = game_state['explosion_map']
-    for coin in coins:     
-        newfield[coin]=10
-    for other in others:
-        if other[2]:    newfield[other[3]]=4
-        else:           newfield[other[3]]=2
-    for bomb in bombs:
-        newfield[bomb[0]]=-5+bomb[1] #some calculation
-    field[fieldxmin:fieldxmax,fieldymin:fieldymax]=(game_state["field"] + newfield - explosion_map)[xmin:xmax,ymin:ymax]      #MoRe InDeXaTiOn
-    #print(field.T)
-    return field.reshape(1,-1)[0]
 
-'''
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -183,11 +144,15 @@ def state_to_features(game_state: dict) -> np.array:
         dist_coins = np.linalg.norm(position_coins-player,axis = 1)                     #find the closest coin
         closest_coin_index = np.argmin(dist_coins)
         closest_coin = position_coins[closest_coin_index]
-        steps_to_coins = np.zeros(4)
-        for j, neighbor in enumerate(neighbor_pos):                                     #get the number of steps from every neighbor to closest coin
-            steps_to_coins[j] = search_for_obj(player, neighbor, closest_coin ,field)
-        steps_to_coins = steps_to_coins / max(steps_to_coins)                           #divide by the max distance to get values between 1 and 0
+        if np.linalg.norm(closest_coin - player) == 0:                                  #if player spawns on coin
+            steps_to_coins = np.zeros(4)
 
+        else:
+            steps_to_coins = np.zeros(4)
+            for j, neighbor in enumerate(neighbor_pos):                                     #get the number of steps from every neighbor to closest coin
+                steps_to_coins[j] = search_for_obj(player, neighbor, closest_coin ,field)   #this function returns inverse stepnumber
+        
+            steps_to_coins = steps_to_coins * 1/max(steps_to_coins)                      
 
     #each direction is encoded by [wall, crate, coin, bomb, priority, danger, closest_other, other_bomb]
     for i in range(np.shape(neighbor_pos)[0]):
@@ -224,8 +189,10 @@ def state_to_features(game_state: dict) -> np.array:
 
   
     
+    #print('channels\n',channels)
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
+    
 
     own_bomb = []
     if game_state['self'][2]:
@@ -323,7 +290,7 @@ def get_neighbor_danger(channels, neighbor_pos, close_bomb_indices, bomb_positio
     #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
     if len(np.where(explosion_map != 0)[0]):                                        #check if there are current explosions
         if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
-            channels[i,5] = 2 
+            channels[i,5] = 1 
 
     return channels, player_on_bomb
   
@@ -337,23 +304,31 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
         dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
         for tile in dangerous_tiles:
             if field[tile[0],tile[1]] == 0: field[tile[0],tile[1]]=2 
+    
+    #print(field.T)
 
     #for enemy in game_state['others']:                                          #since other players block moement, look at them as walls
         #field[enemy[3][0],enemy[3][1]] = 1
 
     tile_count = np.zeros(4)
     for j, neighbor in enumerate(neighbor_pos):
-        tile_count[j] = width_search_danger(field,dangerous_tiles,neighbor,player_pos)
+        tile_count[j] = width_search_danger(field,neighbor,player_pos)
+        
+    if np.sum(tile_count) == 0 : return tile_count
+
     tile_count_ratio = tile_count / np.sum(tile_count)
     
     return tile_count_ratio  
 
-def width_search_danger(field,dangerous_tiles,neighbor_pos,player_pos):
+def width_search_danger(field,neighbor_pos,player_pos):
+    if field[neighbor_pos[0],neighbor_pos[1]] == 1 : 
+        return 0
+
     tiles = 0 
     history = [player_pos]
     q = deque()
     q.append(neighbor_pos)
-
+    #print('neighbor start')
     while len(q) > 0:
 
         pos = q.popleft()
@@ -362,12 +337,17 @@ def width_search_danger(field,dangerous_tiles,neighbor_pos,player_pos):
         neighbors = get_neighbor_pos(pos)
 
         for neighbor in neighbors:
+            #print('neighboor it', neighbor)
 
             if field[neighbor[0], neighbor[1]] == 0:                            #neighbor is on not exploding tile
+                #print('safe', neighbor)
                 tiles +=1 
+                
 
             if field[neighbor[0], neighbor[1]] == 2:                            #check if neighbor is wall or crate, if not...
+                #print('not crate')
                 if not np.any(np.sum(np.abs(history - neighbor), axis=1) == 0): # if neighbor is already in the q, dont append
+                    #print('not_back')
                     q.append(neighbor)                                          # neighbor is not yet in q
                     history.append(neighbor)
 
@@ -422,36 +402,50 @@ def get_segments(player):
     return segments
 
 def search_for_obj(player_pos, neighbor_pos, obj ,field):
+    #print('coin', obj)
+    #print('player:',player_pos)
+
 
     if field[neighbor_pos[0],neighbor_pos[1]] != 0 : 
         return 0
+    
+
+    parents = [None]*17**2 
 
     flat_neighbor = 17 * neighbor_pos[0] + neighbor_pos[1]
     flat_player = 17 * player_pos[0] + player_pos[1]
     flat_obj = 17 * obj[0] + obj[1]
-    parents = [None]*17**2                  # Registriere für jeden Knoten den Vaterknoten im Breitensuchbaum
-    parents[flat_neighbor] = flat_neighbor  # startnode ist die Wurzel des Baums => verweist auf sich selbst
+                    
+    parents[flat_neighbor] = flat_neighbor
     parents[flat_player] = flat_player
 
     q = deque()                      
     q.append(neighbor_pos)              
-     
-    while len(q) > 0:                
-        node = q.popleft()          
-        if np.linalg.norm(node-obj) == 0:      
-            break                    
-        for neighbor in get_neighbor_pos(neighbor_pos): 
+ 
+    while len(q) > 0: 
+          
+        node = q.popleft()     
+        if np.linalg.norm(node-obj) == 0:  
+            break   
+
+        for neighbor in get_neighbor_pos(node):
+
             if field[neighbor[0],neighbor[1]] == 0 :
-                if parents[17 * neighbor[0] + neighbor[1]] is None:  
+               
+                if parents[17 * neighbor[0] + neighbor[1]] is None:
+                    
                     parents[17 * neighbor[0] + neighbor[1]] = 17 * node[0] + node[1]  
-                    q.append(neighbor)         
+                    q.append(neighbor) 
+         
         
     if parents[flat_obj] is None: 
         return 0                  
-     
-     
-    path = [17 * obj[0] + obj[1]]
+
+    path = [flat_obj]
     while path[-1] != flat_neighbor:
+   
         path.append(parents[path[-1]])
-    path.reverse()     
-    return len(path)       
+    
+    return 1/len(path)  
+
+

@@ -93,7 +93,8 @@ def act(self, game_state):
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
     what it contains.
     """
-    random_prob = 0.2
+    random_prob = 1
+
 
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action according to the epsilon greedy policy.")
@@ -578,7 +579,12 @@ def get_coin_dist(game_state, segments, player):
             #print('dist\n',dist_norm)
             #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
             #dist_closest  =  len(dist_norm)/len(position_coins)
-            dist_closest = maximum_dist / (1 + min(dist_norm))
+            
+            dist_closest = maximum_dist/(1+min(dist_norm))
+            #print(dist_closest)
+            
+            
+            
             #print('dist ratio\n',maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
 

@@ -67,7 +67,7 @@ def act(self, game_state: dict) -> str:
         betas = np.array(list(self.model.values()))
         #print(betas)
         feature_vector = np.array(state_to_features(game_state))
-        #print(feature_vector)
+        #print(feature_vector[8],feature_vector[18],feature_vector[28],feature_vector[38])
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         #print(move)
         return move
