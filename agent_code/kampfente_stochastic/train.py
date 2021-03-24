@@ -31,6 +31,9 @@ CRATE_CHASER = 'CRATE_CHASER'
 BOMB_NEXT_TO_CRATE = 'BOMB_NEXT_TO_CRATE'
 BOMB_DESTROYED_NOTHING = 'BOMB_DESTROYED_NOTHING'
 BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
+DROPPED_BOMB_NEAR_ENEMY = 'DROPPED_BOMB_NEAR_ENEMY'
+DROPPED_BOMB_NEXT_TO_ENEMY ='DROPPED_BOMB_NEXT_TO_ENEMY'
+OPPONENT_CHASER = 'CHASED_OPPONENT'
 #LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
 
 
@@ -129,124 +132,6 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     # delete history cache
     self.transitions = deque(maxlen=N)
-
-
-def reward_from_events(self, events: List[str]) -> int:
-    '''
-        Input: self, list of events
-        Output: sum of rewards resulting from the events
-    '''
-    game_rewards = {
-        e.COIN_COLLECTED: 12,
-        e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -80,
-        WAITING_EVENT: -3,
-        e.INVALID_ACTION: -7,
-        e.MOVED_DOWN: -1,
-        e.MOVED_LEFT: -1,
-        e.MOVED_RIGHT: -1,
-        e.MOVED_UP: -1,
-        #VALID_ACTION: -2,
-        COIN_CHASER: 1.5,
-        MOVED_OUT_OF_DANGER: 5,
-        STAYED_NEAR_BOMB: -5,
-        MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 5,   #2
-        e.COIN_FOUND: 1,
-        CRATE_CHASER: 0.5,
-        BOMB_NEXT_TO_CRATE: 2,
-        BOMB_NOT_NEXT_TO_CRATE: -3,
-        BOMB_DESTROYED_NOTHING: -3
-    }
-
-    reward_sum = 0
-
-    for event in events:
-        if event in game_rewards:
-            reward_sum += game_rewards[event]
-    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
-
-    return reward_sum
-
-
-
-def aux_events(self, old_game_state, self_action, new_game_state, events):
-
-    # Valid action
-    #if e.INVALID_ACTION not in events  :
-        #events.append(VALID_ACTION)
-
-    # Waiting
-    if self_action == "WAIT":
-        events.append(WAITING_EVENT)
-    
-    # get positions of the player in old state and new state (tuples (x,y) in this case)
-    old_player_coor = old_game_state['self'][3]     
-    new_player_coor = new_game_state['self'][3]
-        
- 
-    #define event coin_chaser
-    coin_coordinates = old_game_state['coins']      #get coin coordinates(also tuples in form (x,y))
-    if len(coin_coordinates) != 0:                  #now calculate distance to all coins in respect to...
-        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1) #...old player position
-        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1) #...new player position
-
-        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
-            events.append(COIN_CHASER)                          # -> reward
-
-    
-    #define events with bombs
-    old_bomb_coors = old_game_state['bombs']    #get bomb coordinates (careful: timer still included: ((x,y),t)) for each bomb)
-
-    dangerous_tiles = []                        #this array will store all tuples with 'dangerous' tile coordinates
-    for bomb in old_bomb_coors:
-        for coor in self.exploding_tiles_map[bomb[0]]:      #for each bomb get all tiles that explode with that bomb...
-            dangerous_tiles.append(coor)                    ##... and append them to dangerous_tiles
-
-
-    if dangerous_tiles != []:
-
-        #event in case the agent sucsessfully moved away from a dangerous tile -> reward     
-        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
-            events.append(MOVED_OUT_OF_DANGER)
-
-        #event in case agent stayed on a dangerous tile -> penalty
-        if old_player_coor in dangerous_tiles and ("WAITED" in events or "INVALID_ACTION" in events):
-            events.append(STAYED_NEAR_BOMB)
-        
-        #event in case agent moved onto a dangerous tile -> penalty
-        if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
-            events.append(MOVED_INTO_DANGER)
-
-    #if bombs destroyed nothing
-    if 'BOMB_EXPLODED' in events:                   #a bomb placed by our agent exploded
-        if 'CRATE_DESTROYED' not in events:         #no crate got destroyed (in the future also include:no enemy got bombed)
-            #print(BOMB_DESTROYED_NOTHING)
-            events.append(BOMB_DESTROYED_NOTHING)   # -> penalty
-    
-    
-    #define crate chaser: the agent gets rewarded if he moves closer to crates ONLY if he currently has a bomb
-    field = old_game_state['field']
-    rows,cols = np.where(field == 1)
-    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
-    old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
-    new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
-
-    if old_crate_distance.size > 0:                 #if agent moved closer to the nearest crate and BOMB action is possible 
-        if min(new_crate_distance) < min(old_crate_distance) and old_game_state['self'][2]: 
-            #print(CRATE_CHASER)
-            events.append(CRATE_CHASER)
-        
-        
-    #define event for bomb next to crate
-        if self_action == 'BOMB' and e.INVALID_ACTION not in events:                                       #if bomb is placed...
-            #if min(old_crate_distance) == 1:    # ... give reward for each crate neighbouring bomb position                   
-                #events.append(BOMB_NEXT_TO_CRATE)   
-            for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
-                events.append(BOMB_NEXT_TO_CRATE)                   
-            if len(np.where(old_crate_distance==1)[0]) == 0 :                                                       #bomb is not placed next to crate
-                events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
-                #print(BOMB_NOT_NEXT_TO_CRATE)
 
 
 
@@ -467,3 +352,232 @@ def Q_func(self, state):
     vec_model = np.array(list(self.model.values()))     # vectorizing the model dict
     
     return np.max(np.dot(vec_model, state))      # return the max Q value
+
+
+
+def reward_from_events(self, events: List[str]) -> int:
+    '''
+        Input: self, list of events
+        Output: sum of rewards resulting from the events
+    '''
+    game_rewards = {
+        e.COIN_COLLECTED: 30,
+        e.KILLED_OPPONENT: 50,
+        e.KILLED_SELF: -150,
+        WAITING_EVENT: -3,
+        e.INVALID_ACTION: -7,
+        e.MOVED_DOWN: -1,
+        e.MOVED_LEFT: -1,
+        e.MOVED_RIGHT: -1,
+        e.MOVED_UP: -1,
+        #VALID_ACTION: -2,
+        COIN_CHASER: 1.5,
+        MOVED_OUT_OF_DANGER: 8,
+        STAYED_NEAR_BOMB: -5,
+        MOVED_INTO_DANGER: -5,
+        e.CRATE_DESTROYED: 6,   #2
+        e.COIN_FOUND: 1,
+        CRATE_CHASER: 0.5,
+        BOMB_NEXT_TO_CRATE: 3,
+        BOMB_NOT_NEXT_TO_CRATE: -3,
+        #BOMB_DESTROYED_NOTHING: -3,
+        DROPPED_BOMB_NEAR_ENEMY: 7,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 20,
+        OPPONENT_CHASER: 2 
+
+    }
+    reward_sum = 0
+    for event in events:
+        if event in game_rewards:
+            reward_sum += game_rewards[event]
+    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
+    return reward_sum
+
+
+
+def aux_events(self, old_game_state, self_action, new_game_state, events):
+
+    # Valid action
+    #if e.INVALID_ACTION not in events  :
+        #events.append(VALID_ACTION)
+
+    # Waiting
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+    
+    # get positions of the player in old state and new state (tuples (x,y) in this case)
+    old_player_coor = old_game_state['self'][3]     
+    new_player_coor = new_game_state['self'][3]
+        
+ 
+    #define event coin_chaser
+    coin_coordinates = old_game_state['coins']      #get coin coordinates(also tuples in form (x,y))
+    if len(coin_coordinates) != 0:                  #now calculate distance to all coins in respect to...
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1) #...old player position
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1) #...new player position
+
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)                          # -> reward
+
+    
+    #define events with bombs
+    old_bomb_coors = old_game_state['bombs']    #get bomb coordinates (careful: timer still included: ((x,y),t)) for each bomb)
+
+    dangerous_tiles = []                        #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:      #for each bomb get all tiles that explode with that bomb...
+            dangerous_tiles.append(coor)                    ##... and append them to dangerous_tiles
+
+
+    if dangerous_tiles != []:
+
+        #event in case the agent sucsessfully moved away from a dangerous tile -> reward     
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_OUT_OF_DANGER)
+
+        #event in case agent stayed on a dangerous tile -> penalty
+        if old_player_coor in dangerous_tiles and ("WAITED" in events or "INVALID_ACTION" in events):
+            events.append(STAYED_NEAR_BOMB)
+        
+        #event in case agent moved onto a dangerous tile -> penalty
+        if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
+            events.append(MOVED_INTO_DANGER)
+
+    #if bombs destroyed nothing
+    if 'BOMB_EXPLODED' in events:                   #a bomb placed by our agent exploded
+        if 'CRATE_DESTROYED' not in events:         #no crate got destroyed (in the future also include:no enemy got bombed)
+            #print(BOMB_DESTROYED_NOTHING)
+            events.append(BOMB_DESTROYED_NOTHING)   # -> penalty
+    
+    
+    #define crate chaser: the agent gets rewarded if he moves closer to crates ONLY if he currently has a bomb
+    field = old_game_state['field']
+    rows,cols = np.where(field == 1)
+    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
+    old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
+    new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
+
+    if old_crate_distance.size > 0:                 #if agent moved closer to the nearest crate and BOMB action is possible 
+        if min(new_crate_distance) < min(old_crate_distance) and old_game_state['self'][2]: 
+            #print(CRATE_CHASER)
+            events.append(CRATE_CHASER)
+
+
+
+    #define event opponent_chaser
+    #getting position of other players from state:
+    other_position = []
+    for i in range(len(old_game_state['others'])):
+        other_position.append([old_game_state['others'][i][3][0], old_game_state['others'][i][3][1]])
+    other_position = np.array(other_position)
+
+
+    if len(other_position) != 0:                  #now calculate distance to all coins in respect to...
+        old_other_distances = np.linalg.norm(np.subtract(other_position, old_player_coor), axis=1) #...old player position
+        new_other_distances = np.linalg.norm(np.subtract(other_position, new_player_coor), axis=1) #...new player position
+
+        if min(new_other_distances) < min(old_other_distances):   #if the distance to closest coin got smaller
+            events.append(OPPONENT_CHASER)    
+
+        
+    #define event for bomb next to crate
+        if self_action == 'BOMB' and e.INVALID_ACTION not in events:                                       #if bomb is placed...  
+            for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
+                events.append(BOMB_NEXT_TO_CRATE)                   
+            if len(np.where(old_crate_distance==1)[0]) == 0 :           #bomb is not placed next to crate
+                events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
+                #print(BOMB_NOT_NEXT_TO_CRATE)
+            
+            #new
+            if len(old_game_state['others']) !=0:
+                for others_coor in old_game_state['others']:
+                    if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
+                        #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+                        events.append(DROPPED_BOMB_NEAR_ENEMY)
+                        #print('near')
+                    if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:
+                        events.append(DROPPED_BOMB_NEXT_TO_ENEMY)
+                        #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+
+
+
+
+'''
+def aux_events(self, old_game_state, self_action, new_game_state, events):
+
+    # Valid action
+    #if e.INVALID_ACTION not in events  :
+        #events.append(VALID_ACTION)
+
+    # Waiting
+    if self_action == "WAIT":
+        events.append(WAITING_EVENT)
+    
+    # get positions of the player in old state and new state (tuples (x,y) in this case)
+    old_player_coor = old_game_state['self'][3]     
+    new_player_coor = new_game_state['self'][3]
+        
+ 
+    #define event coin_chaser
+    coin_coordinates = old_game_state['coins']      #get coin coordinates(also tuples in form (x,y))
+    if len(coin_coordinates) != 0:                  #now calculate distance to all coins in respect to...
+        old_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,old_player_coor), axis=1) #...old player position
+        new_coin_distances = np.linalg.norm(np.subtract(coin_coordinates,new_player_coor), axis=1) #...new player position
+
+        if min(new_coin_distances) < min(old_coin_distances):   #if the distance to closest coin got smaller
+            events.append(COIN_CHASER)                          # -> reward
+
+    
+    #define events with bombs
+    old_bomb_coors = old_game_state['bombs']    #get bomb coordinates (careful: timer still included: ((x,y),t)) for each bomb)
+
+    dangerous_tiles = []                        #this array will store all tuples with 'dangerous' tile coordinates
+    for bomb in old_bomb_coors:
+        for coor in self.exploding_tiles_map[bomb[0]]:      #for each bomb get all tiles that explode with that bomb...
+            dangerous_tiles.append(coor)                    ##... and append them to dangerous_tiles
+
+
+    if dangerous_tiles != []:
+
+        #event in case the agent sucsessfully moved away from a dangerous tile -> reward     
+        if old_player_coor in dangerous_tiles and new_player_coor not in dangerous_tiles:
+            events.append(MOVED_OUT_OF_DANGER)
+
+        #event in case agent stayed on a dangerous tile -> penalty
+        if old_player_coor in dangerous_tiles and ("WAITED" in events or "INVALID_ACTION" in events):
+            events.append(STAYED_NEAR_BOMB)
+        
+        #event in case agent moved onto a dangerous tile -> penalty
+        if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
+            events.append(MOVED_INTO_DANGER)
+
+    #if bombs destroyed nothing
+    if 'BOMB_EXPLODED' in events:                   #a bomb placed by our agent exploded
+        if 'CRATE_DESTROYED' not in events:         #no crate got destroyed (in the future also include:no enemy got bombed)
+            #print(BOMB_DESTROYED_NOTHING)
+            events.append(BOMB_DESTROYED_NOTHING)   # -> penalty
+    
+    
+    #define crate chaser: the agent gets rewarded if he moves closer to crates ONLY if he currently has a bomb
+    field = old_game_state['field']
+    rows,cols = np.where(field == 1)
+    crates_position = np.array([rows,cols]).T       #all crate coordinates in form [x,y] in one array
+    old_crate_distance = np.linalg.norm(crates_position-np.array([old_player_coor[0],old_player_coor[1]]),axis = 1)
+    new_crate_distance = np.linalg.norm(crates_position-np.array([new_player_coor[0],new_player_coor[1]]),axis = 1)
+
+    if old_crate_distance.size > 0:                 #if agent moved closer to the nearest crate and BOMB action is possible 
+        if min(new_crate_distance) < min(old_crate_distance) and old_game_state['self'][2]: 
+            #print(CRATE_CHASER)
+            events.append(CRATE_CHASER)
+        
+        
+    #define event for bomb next to crate
+        if self_action == 'BOMB' and e.INVALID_ACTION not in events:                                       #if bomb is placed...
+            #if min(old_crate_distance) == 1:    # ... give reward for each crate neighbouring bomb position                   
+                #events.append(BOMB_NEXT_TO_CRATE)   
+            for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
+                events.append(BOMB_NEXT_TO_CRATE)                   
+            if len(np.where(old_crate_distance==1)[0]) == 0 :                                                       #bomb is not placed next to crate
+                events.append(BOMB_NOT_NEXT_TO_CRATE)                   # -> penalty
+                #print(BOMB_NOT_NEXT_TO_CRATE)
+'''
