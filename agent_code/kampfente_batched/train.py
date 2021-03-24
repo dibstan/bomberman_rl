@@ -363,8 +363,8 @@ def horizontal_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[:,16:24] = state[:,24:32]
-    shifted_state[:,24:32] = state[:,16:24]
+    shifted_state[:,18:27] = state[:,27:36]
+    shifted_state[:,27:36] = state[:,18:27]
 
     #shifting actions
     if action == "LEFT":
@@ -383,8 +383,8 @@ def vertical_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[:,0:8] = state[:,8:16]
-    shifted_state[:,8:16] = state[:,0:8]
+    shifted_state[:,0:9] = state[:,9:18]
+    shifted_state[:,9:18] = state[:,0:9]
 
     #shifting actions
     if action == "UP":
@@ -403,13 +403,13 @@ def turn_right(state, action):
     turned_state = np.copy(state)
     
     #up -> left 
-    turned_state[:,0:8] = state[:,16:24]
+    turned_state[:,0:9] = state[:,18:27]
     #down -> right
-    turned_state[:,8:16] = state[:,24:32]
+    turned_state[:,9:18] = state[:,27:36]
     #right -> up
-    turned_state[:,16:24] = state[:,8:16]
+    turned_state[:,18:27] = state[:,9:18]
     #left -> down
-    turned_state[:,24:32] = state[:,0:8]
+    turned_state[:,27:36] = state[:,0:9]
 
     #shifting actions
     if action == 'LEFT':
@@ -434,13 +434,13 @@ def turn_left(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[:,0:8] = state[:,24:32]
+    turned_state[:,0:9] = state[:,27:36]
     #down -> right
-    turned_state[:,8:16] = state[:,16:24]
+    turned_state[:,9:18] = state[:,18:27]
     #right -> up
-    turned_state[:,16:24] = state[:,0:8]
+    turned_state[:,18:27] = state[:,0:9]
     #left -> down
-    turned_state[:,24:32] = state[:,8:16]
+    turned_state[:,27:36] = state[:,9:18]
 
     #shifting actions
     if action == 'LEFT':
