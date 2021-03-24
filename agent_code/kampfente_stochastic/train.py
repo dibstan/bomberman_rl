@@ -15,9 +15,9 @@ Transition = namedtuple('Transition',
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.01     # learning rate
 GAMMA = 0.01     # discount rate
-KAPPA = 0.0     # adaption konstant for learning rate (if set to zero -> konstant learning rate)
+KAPPA = 0.     # adaption konstant for learning rate (if set to zero -> konstant learning rate)
 N = 5   # N step temporal difference
-CLIP = 20   # initial clip value
+CLIP = 10   # initial clip value
 N_CLIPPER = np.inf      # number of fluctuations considering in auto clipping
 
 # Auxillary events
@@ -300,6 +300,7 @@ def n_step_TD(self, n):
         GRADIENT = first_state * np.clip((Q_TD - Q), -self.clip,self.clip)     # gradient descent
         
         self.model[action] = self.model[action] + self.learning_rate * GRADIENT   # updating the model for the relevant action
+        
         #print(self.model)
 
         # Train with augmented data
@@ -339,7 +340,7 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
     Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
 
     GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
-    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip,self.clip)   # updating the model for the relevant action
+    model_update = self.model[shift_action] + self.learning_rate * np.clip(GRADIENT, -self.clip,self.clip)   # updating the model for the relevant action
 
     return model_update, shift_action
 

@@ -50,7 +50,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    random_prob = 0.5
+    random_prob = 0.
 
 
     if self.train and random.random() < random_prob:
