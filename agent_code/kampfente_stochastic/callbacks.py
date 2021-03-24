@@ -70,7 +70,7 @@ def act(self, game_state: dict) -> str:
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        print(move)
+        #print(move)
         return move
         
     self.logger.debug("Querying model for action.")
