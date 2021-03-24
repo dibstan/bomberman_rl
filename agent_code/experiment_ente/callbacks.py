@@ -173,8 +173,8 @@ def state_to_features(game_state: dict) -> np.array:
     if len(game_state['others']) != 0:
         for other in game_state['others']:
             for i in range(4):
-                if np.linalg.norm(np.array(other[3])-neighbor_pos[i])==0:
-                    channels[i,9] == 1
+                if np.linalg.norm(np.array(other[3]) - neighbor_pos[i]) == 0:
+                    channels[i,9] = 1
 
     #describing distance to other players
     if other_position.size > 0:
