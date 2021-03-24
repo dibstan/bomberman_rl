@@ -7,9 +7,7 @@ import numpy as np
 from sklearn import exceptions
 from sklearn.datasets import make_regression
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import AdaBoostRegressor
+
 
 import events as e
 from .callbacks import state_to_features
@@ -20,11 +18,12 @@ Transition = namedtuple('Transition',
 
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-ALPHA = .3      # learning rate
+ALPHA = .1      # learning rate
 GAMMA = 0.01    # discount rate
-KAPPA = 0.0   # adaption konstant for learning rate (if set to zero -> konstant learning rate)
+KAPPA = 0.001   # adaption konstant for learning rate (if set to zero -> konstant learning rate)
 PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':1, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
+MAX_BATCH_SIZE = 20
 N = 4   # N step temporal difference
 
 # Auxillary events
@@ -64,7 +63,6 @@ def setup_training(self):
 
     self.round = 0
     self.learning_rate = ALPHA
-    
     
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -116,8 +114,6 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # delete history cache
     self.transitions = deque(maxlen=HIST_SIZE)
 
-   
-
 
 def reward_from_events(self, events: List[str]) -> int:
     '''
@@ -155,7 +151,6 @@ def reward_from_events(self, events: List[str]) -> int:
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
 
     return reward_sum
-
 
 
 def aux_events(self, old_game_state, self_action, new_game_state, events):
@@ -237,7 +232,6 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 #print(BOMB_NOT_NEXT_TO_CRATE)
     
 
-
 def experience_replay(self, n):
     '''
         input: self, n: nummber of steps in n-step temporal differnece
@@ -283,7 +277,6 @@ def experience_replay(self, n):
             nth_states = np.array([])
 
 
-        #print(states, nth_states, rewards)
         if states != np.array([]):
             
             if np.shape(states)[0] == 1:
@@ -305,7 +298,6 @@ def experience_replay(self, n):
 
             # Train with augmented data
             #feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations)
-            
 
             self.isFitted[action] = True
             
@@ -322,16 +314,52 @@ def update_model(self, states, discount, rewards, nth_states, action, n, fluctua
         
         Q = self.model[action].predict(states)
 
+        residuals = np.abs(Q-Q_TD)
+
         fluctuations.append(np.abs(np.mean((Q_TD-Q))))
 
-    else:
-        Q_TD = np.dot(rewards,discount)
-    
+        # residual based sampling from subbatch
+        states, rewards, nth_states, Q_TD = residual_sampling(states, rewards, nth_states, residuals, Q_TD)
 
+        
+
+    else:
+
+        Q_TD = np.dot(rewards,discount)
+
+        # random sampling from subbatch
+        states, rewards, nth_states = random_sampling(states, rewards, nth_states)
     
-    self.model[action].n_estimators += 3
+    
+    self.model[action].n_estimators += 1
     
     self.model[action].fit(states, Q_TD)    #updating the model
+
+
+def random_sampling(states, rewards, nth_states):
+    N = np.shape(states)[0]     # number of instances in original subbatch
+
+    if N == 0:      # No instances in subbatch
+        return np.array([]), np.array([]), np.array([])
+    
+    N_new = np.clip(N, 0, MAX_BATCH_SIZE)   #   number of instance in new subbatch with limit RANDOM_BATCH_SIZE
+    
+    idx_new = random.choices(np.arange(N), k = N_new)   # choose N_new indices from the old ones
+
+    return states[idx_new], rewards[idx_new], nth_states[idx_new]
+
+
+def residual_sampling(states, rewards, nth_states, residuals, Q_TD):
+    N = np.shape(states)[0]     # number of instances in original subbatch
+
+    if N == 0:      # No instances in subbatch
+        return np.array([]), np.array([]), np.array([])
+    
+    N_new = np.clip(N, 0, RANDOM_BATCH_SIZE)   #   number of instance in new subbatch with limit RANDOM_BATCH_SIZE
+    
+    idx_new = random.choices(np.arange(N), weights = residuals,  k = N_new)   # choose N_new indices from the old ones
+
+    return states[idx_new], rewards[idx_new], nth_states[idx_new], Q_TD[idx_new]
 
 
 def feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations):
@@ -478,12 +506,13 @@ def Q_func(self, state):
         input: self, state
         output: Q value of the best action
     '''
+    N = np.shape(state)[0]
     Q_values = []
     for action in self.model.keys():
         if self.isFitted[action] == True:
             Q_values.append(self.model[action].predict(state))
         else:
-            Q_values.append(-np.inf)
+            Q_values.append(np.ones(N)*(-np.inf))
     #print(Q_values)
     
     Q_max = np.max(Q_values, axis = 0)
