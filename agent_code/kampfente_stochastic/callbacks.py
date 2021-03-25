@@ -208,7 +208,7 @@ def state_to_features(game_state: dict) -> np.array:
         own_bomb.append(0)
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
-    print(len(stacked_channels))
+    
     return stacked_channels
 
 def get_coin_prio(game_state, neighbor_pos, player):
