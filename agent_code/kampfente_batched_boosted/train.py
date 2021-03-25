@@ -7,9 +7,7 @@ import numpy as np
 from sklearn import exceptions
 from sklearn.datasets import make_regression
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import AdaBoostRegressor
+
 
 import events as e
 from .callbacks import state_to_features
@@ -20,11 +18,12 @@ Transition = namedtuple('Transition',
 
 # Hyper parameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability 
-ALPHA = .3      # learning rate
+ALPHA = .1      # learning rate
 GAMMA = 0.01    # discount rate
-KAPPA = 0.0   # adaption konstant for learning rate (if set to zero -> konstant learning rate)
-PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':100, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
+KAPPA = 0.001   # adaption konstant for learning rate (if set to zero -> konstant learning rate)
+PARAMS = {'random_state':0, 'warm_start':True, 'n_estimators':1, 'learning_rate':ALPHA, 'max_depth':3}  # parameters for the GradientBoostingRegressor
 HIST_SIZE = 1000
+MAX_BATCH_SIZE = 20
 N = 4   # N step temporal difference
 
 # Auxillary events
@@ -64,7 +63,6 @@ def setup_training(self):
 
     self.round = 0
     self.learning_rate = ALPHA
-    
     
     
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -116,8 +114,6 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # delete history cache
     self.transitions = deque(maxlen=HIST_SIZE)
 
-   
-
 
 def reward_from_events(self, events: List[str]) -> int:
     '''
@@ -135,7 +131,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_RIGHT: -1,
         e.MOVED_UP: -1,
         #VALID_ACTION: -2,
-        COIN_CHASER: 1.5,
+        COIN_CHASER: 5,
         MOVED_OUT_OF_DANGER: 5,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
@@ -155,7 +151,6 @@ def reward_from_events(self, events: List[str]) -> int:
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
 
     return reward_sum
-
 
 
 def aux_events(self, old_game_state, self_action, new_game_state, events):
@@ -237,7 +232,6 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                 #print(BOMB_NOT_NEXT_TO_CRATE)
     
 
-
 def experience_replay(self, n):
     '''
         input: self, n: nummber of steps in n-step temporal differnece
@@ -283,7 +277,6 @@ def experience_replay(self, n):
             nth_states = np.array([])
 
 
-        #print(states, nth_states, rewards)
         if states != np.array([]):
             
             if np.shape(states)[0] == 1:
@@ -297,25 +290,15 @@ def experience_replay(self, n):
             if action == 'BOMB':
                 discount[-1] = 1
             
-            if self.isFitted[action] == True:
-                Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
-                
-                Q = self.model[action].predict(states)
-
-                fluctuations.append(np.abs(np.mean(np.clip((Q_TD-Q),-10,10))))
-            else:
-                Q_TD = np.dot(rewards,discount)
-
-            #print(action, rewards, Q_TD)
-            #print(action, Q_TD, Q)
 
             # updating the model
             self.model[action].learning_rate = self.learning_rate
-            self.model[action].n_estimators += 3
-            self.model[action].fit(states, Q_TD)
 
-            #print(action, Q_TD, self.model[action].predict(states))
-            
+            update_model(self, states, discount, rewards, nth_states, action, n, fluctuations)
+
+            # Train with augmented data
+            #feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations)
+
             self.isFitted[action] = True
             
            
@@ -324,18 +307,214 @@ def experience_replay(self, n):
         self.fluctuations.append(np.max(fluctuations))
 
 
+def update_model(self, states, discount, rewards, nth_states, action, n, fluctuations):
+    
+    if self.isFitted[action] == True:
+        Q_TD = np.dot(rewards,discount) + GAMMA**n * Q_func(self,nth_states)    # Array holding the n-step-TD Q-value for each instance in subbatch
+        
+        Q = self.model[action].predict(states)
+
+        residuals = np.abs(Q-Q_TD)
+
+        fluctuations.append(np.abs(np.mean((Q_TD-Q))))
+
+        # residual based sampling from subbatch
+        states, rewards, nth_states, Q_TD = residual_sampling(states, rewards, nth_states, residuals, Q_TD)
+
+        
+
+    else:
+
+        Q_TD = np.dot(rewards,discount)
+
+        # random sampling from subbatch
+        states, rewards, nth_states = random_sampling(states, rewards, nth_states)
+    
+    
+    self.model[action].n_estimators += 1
+    
+    self.model[action].fit(states, Q_TD)    #updating the model
+
+
+def random_sampling(states, rewards, nth_states):
+    N = np.shape(states)[0]     # number of instances in original subbatch
+
+    if N == 0:      # No instances in subbatch
+        return np.array([]), np.array([]), np.array([])
+    
+    N_new = np.clip(N, 0, MAX_BATCH_SIZE)   #   number of instance in new subbatch with limit RANDOM_BATCH_SIZE
+    
+    idx_new = random.choices(np.arange(N), k = N_new)   # choose N_new indices from the old ones
+
+    return states[idx_new], rewards[idx_new], nth_states[idx_new]
+
+
+def residual_sampling(states, rewards, nth_states, residuals, Q_TD):
+    N = np.shape(states)[0]     # number of instances in original subbatch
+
+    if N == 0:      # No instances in subbatch
+        return np.array([]), np.array([]), np.array([])
+    
+    N_new = np.clip(N, 0, RANDOM_BATCH_SIZE)   #   number of instance in new subbatch with limit RANDOM_BATCH_SIZE
+    
+    idx_new = random.choices(np.arange(N), weights = residuals,  k = N_new)   # choose N_new indices from the old ones
+
+    return states[idx_new], rewards[idx_new], nth_states[idx_new], Q_TD[idx_new]
+
+
+def feature_augmentation(self, states, discount, rewards, nth_states, action, n, fluctuations):
+    #update with horizontally shifted state:
+    hshift_states, hshift_action = horizontal_shift(states, action)
+    hshift_nth_states, hshift_action = horizontal_shift(nth_states, action)
+    update_model(self, hshift_states, discount, rewards, hshift_nth_states, hshift_action, n, fluctuations)
+
+    #update with vertically shifted state:
+    vshift_states, vshift_action = vertical_shift(states, action)
+    vshift_nth_states, vshift_action = vertical_shift(nth_states, action)
+    update_model(self, vshift_states, discount, rewards, vshift_nth_states, vshift_action, n, fluctuations)
+
+    #update with turn left:
+    rturn_states, rturn_action = turn_right(states, action)
+    rturn_nth_states, rturn_action = turn_right(nth_states, action)
+    update_model(self, rturn_states, discount, rewards, rturn_nth_states, rturn_action, n, fluctuations)
+
+    #update with turn right:
+    lturn_states, lturn_action = turn_left(states, action)
+    lturn_nth_states, lturn_action = turn_left(nth_states, action)
+    update_model(self, lturn_states, discount, rewards, lturn_nth_states, lturn_action, n, fluctuations)
+
+    #update with turn around:
+    fturn_states, fturn_action = turn_around(states, action)
+    fturn_nth_states, fturn_action = turn_around(nth_states, action)
+    update_model(self, fturn_states, discount, rewards, fturn_nth_states, fturn_action, n, fluctuations)
+
+
+def horizontal_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[:,16:24] = state[:,24:32]
+    shifted_state[:,24:32] = state[:,16:24]
+
+    #shifting actions
+    if action == "LEFT":
+        new_action = "RIGHT"
+    
+    elif action == "RIGHT":
+        new_action = "LEFT"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def vertical_shift(state, action):
+    #initializing the shifted state:
+    shifted_state = np.copy(state)
+
+    #shifting up to down:
+    shifted_state[:,0:8] = state[:,8:16]
+    shifted_state[:,8:16] = state[:,0:8]
+
+    #shifting actions
+    if action == "UP":
+        new_action = "DOWN"
+    
+    elif action == "DOWN":
+        new_action = "UP"
+
+    else:
+        new_action = action
+
+    return shifted_state, new_action
+
+def turn_right(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+    
+    #up -> left 
+    turned_state[:,0:8] = state[:,16:24]
+    #down -> right
+    turned_state[:,8:16] = state[:,24:32]
+    #right -> up
+    turned_state[:,16:24] = state[:,8:16]
+    #left -> down
+    turned_state[:,24:32] = state[:,0:8]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'UP'
+    
+    elif action == 'RIGHT':
+        new_action = 'DOWN'
+
+    elif action == 'DOWN':
+        new_action = 'LEFT'
+    
+    elif action == 'UP':
+        new_action = 'RIGHT'
+
+    else:
+        new_action = action
+    
+    return turned_state, new_action
+
+def turn_left(state, action):
+    #initializing the turned state:
+    turned_state = np.copy(state)
+
+    #up -> left 
+    turned_state[:,0:8] = state[:,24:32]
+    #down -> right
+    turned_state[:,8:16] = state[:,16:24]
+    #right -> up
+    turned_state[:,16:24] = state[:,0:8]
+    #left -> down
+    turned_state[:,24:32] = state[:,8:16]
+
+    #shifting actions
+    if action == 'LEFT':
+        new_action = 'DOWN'
+    
+    elif action == 'RIGHT':
+        new_action = 'UP'
+
+    elif action == 'DOWN':
+        new_action = 'RIGHT'
+    
+    elif action == 'UP':
+        new_action = 'LEFT'
+
+    else:
+        new_action = action
+
+    return turned_state, new_action
+
+def turn_around(state, action):
+    #first turn:
+    turn1, action1 = turn_left(state, action)
+
+    #second turn:
+    turn2, action2 = turn_left(turn1, action1)
+
+    return turn2, action2
+
 
 def Q_func(self, state):
     '''
         input: self, state
         output: Q value of the best action
     '''
+    N = np.shape(state)[0]
     Q_values = []
     for action in self.model.keys():
         if self.isFitted[action] == True:
             Q_values.append(self.model[action].predict(state))
         else:
-            Q_values.append(-np.inf)
+            Q_values.append(np.ones(N)*(-np.inf))
+    #print(Q_values)
     
     Q_max = np.max(Q_values, axis = 0)
+    
     return Q_max      # return the max Q value

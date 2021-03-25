@@ -50,8 +50,7 @@ def act(self, game_state: dict) -> str:
     """
     # todo Exploration vs exploitation
     self.logger.info(state_to_features(game_state))
-    if self.model == None: random_prob = 0
-    else: random_prob = 0.75
+    random_prob = 0.
 
 
     if self.train and random.random() < random_prob:
@@ -60,19 +59,15 @@ def act(self, game_state: dict) -> str:
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
         
-        #
         #print(move)
-        return move #np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
-    
-    #if we just want to play and not overwrite training data
-    if not self.train: 
-        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+        return move 
+    if not self.train:
         betas = np.array(list(self.model.values()))
         feature_vector = np.array(state_to_features(game_state))
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        #print(move)
-        return move
         
+        #print(betas)
+        return move 
     self.logger.debug("Querying model for action.")
     return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.15,0.05])
 
@@ -98,7 +93,7 @@ def state_to_features(game_state: dict) -> np.array:
         return None
 
     #creating channels for one-hot encoding
-    channels = np.zeros((4,10))
+    channels = np.zeros((4,9))
     
     #describing field of agent:
     player_tile = np.zeros(2)
@@ -161,13 +156,6 @@ def state_to_features(game_state: dict) -> np.array:
                     channels[closest_free_index[i]][8] = 1
                     break
 
-    
-    #other player on neighbor?
-    if len(game_state['others']) != 0:
-        for other in game_state['others']:
-            for i in range(4):
-                if np.linalg.norm(np.array(other[3]) - neighbor_pos[i]) == 0:
-                    channels[i,9] = 1
 
     #describing priority: 
     if position_coins.size > 0:
