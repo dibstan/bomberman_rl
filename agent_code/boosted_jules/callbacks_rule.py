@@ -5,6 +5,8 @@ import numpy as np
 import pickle 
 
 
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+
 
 def look_for_targets(free_space, start, targets, logger=None):
     """Find direction of closest target that can be reached via free tiles.
@@ -93,21 +95,23 @@ def act(self, game_state):
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
     what it contains.
     """
-    random_prob = 1
+    random_prob = 0.2
 
 
     if self.train and random.random() < random_prob:
-        self.logger.debug("Choosing action according to the epsilon greedy policy.")
+        return np.random.choice(ACTIONS, p=[.2,.2,.2,.2,.1,.1])
 
-        q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
-        for move in self.model:
-            q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
-        move = list(q_value.keys())[np.argmax(list(q_value.values()))]
+        #self.logger.debug("Choosing action according to the epsilon greedy policy.")
+
+        #q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
+        #for move in self.model:
+            #q_value[move] = self.model[move].predict(np.reshape(state_to_features(game_state),(1,-1)))
+        #move = list(q_value.keys())[np.argmax(list(q_value.values()))]
         #print(q_value)
         #print(q_value)
         #print(move)
 
-        return move
+        #return move
 
     if not self.train:
         q_value={'UP':0,'RIGHT':0,'DOWN':0,'LEFT':0,'WAIT':0,'BOMB':0}
@@ -269,6 +273,7 @@ def state_to_features(game_state):
 
 '''
 
+
 def state_to_features(game_state: dict) -> np.array:
     """
     *This is not a required function, but an idea to structure your code.*
@@ -289,10 +294,7 @@ def state_to_features(game_state: dict) -> np.array:
         return None
 
     #creating channels for one-hot encoding
-    channels = np.zeros((4,10))
-    
-    #describing field of agent:
-    player_tile = np.zeros(2)
+    channels = np.zeros((4,7))
 
 
     #get player position:
@@ -303,6 +305,7 @@ def state_to_features(game_state: dict) -> np.array:
     
     #get explosion map (remeber: explosions last for 2 steps)
     explosion_map = game_state['explosion_map']
+    #print(explosion_map)
 
     #getting bomb position from state 
    
@@ -314,23 +317,36 @@ def state_to_features(game_state: dict) -> np.array:
     
     #getting segments
     segments = get_segments(player)
-    
-    #getting position of coins and distance of neighboring tiles
-    dist_coins, position_coins = get_coin_dist(game_state, segments, player)
 
-    #'''
     #getting position of other players and distance
     dist_others, other_position = get_player_dist(game_state, segments, player)
-    #'''
+   
     #getting position of crates and distance
     dist_crates, crates_position = get_crate_dist(field, segments, player)
 
     #searching for near bombs:
+    player_on_bomb = False          #needed later to determine if player is in explosion range 
+    close_bomb_indices = []
     if len(bomb_position) != 0:
         bomb_distances = np.linalg.norm(np.subtract(bomb_position, player) , axis = 1)
         close_bomb_indices = np.where(bomb_distances <= 4)[0]
-
+    
+    #getting position of closest coin and assign each neighbor the number of steps to it 
+    position_coins = np.array(game_state['coins'])
+    if position_coins.size > 0:
         
+        dist_coins = np.linalg.norm(position_coins-player,axis = 1)                     #find the closest coin
+        closest_coin_index = np.argmin(dist_coins)
+        closest_coin = position_coins[closest_coin_index]
+        if np.linalg.norm(closest_coin - player) == 0:                                  #if player spawns on coin
+            steps_to_coins = np.zeros(4)
+
+        else:
+            steps_to_coins = np.zeros(4)
+            for j, neighbor in enumerate(neighbor_pos):                                     #get the number of steps from every neighbor to closest coin
+                steps_to_coins[j] = search_for_obj(player, neighbor, closest_coin ,field)   #this function returns inverse stepnumber
+            if max(steps_to_coins) == 0: pass
+            else: steps_to_coins = steps_to_coins * 1/max(steps_to_coins)                       
 
     #each direction is encoded by [wall, crate, coin, bomb, priority, danger, closest_other, other_bomb]
     for i in range(np.shape(neighbor_pos)[0]):
@@ -339,61 +355,40 @@ def state_to_features(game_state: dict) -> np.array:
         channels = get_neighbor_value(game_state, channels, neighbor_pos, position_coins, i)
 
         #finding bomb:
-        if len(bomb_position) != 0:
-            #setting bomb value or danger value to 1 if appropriate:
-            channels, player_tile = get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, exploding_tiles_map, bomb_position, player, player_tile, explosion_map, i)
+        if len(close_bomb_indices) != 0:
+            #neighbor danger is described in get_neighbor_danger. give every neighbor its danger-value, player_on_bomb is a boolean (True if player on bomb)
+            channels, player_on_bomb = get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, bomb_position, player, explosion_map, i)
+        
+        #describing coin prio:
+        if position_coins.size > 0:
+            channels[i,2] = steps_to_coins[i]       #for each neighbor note number of steps to closest coin
 
-    #print(player_tile)        
     #describing pritority for next free tile if a bomb has been placed
-    if player_tile[0] == 1:
-        free_tile = find_closest_free_tile(game_state, player, close_bomb_indices, bomb_position)
-        if free_tile is not None:
-            closest_free_index = get_tile_prio(free_tile, neighbor_pos)
-
-            for i in range(len(closest_free_index)):
-                if channels[closest_free_index[i]][0] != 1:
-                    channels[closest_free_index[i]][8] = 1
-                    break
-
-    #describing coin distance: 
-    if position_coins.size > 0:
-        for i in range(len(dist_coins)):
-            if channels[i][0] != 1 and channels[i][1] != 1:
-                channels[i][4] = dist_coins[i]
+    if player_on_bomb: 
+        #print('player_o_bomb')
+        tile_count = find_closest_free_tile(game_state, player, close_bomb_indices, bomb_position,neighbor_pos)
+        #print(tile_count)
+        for j in range(4):
+            channels[j,5] = tile_count[j]
     
-
-    #################################
-    if len(game_state['others']) != 0:
-        for other in game_state['others']:
-            for i in range(4):
-                if np.linalg.norm(np.array(other[3])-neighbor_pos[i])==0:
-                    channels[i,9] == 1
 
     #describing distance to other players
     if other_position.size > 0:
-        for i in range(len(dist_others)):
-            if channels[i][0] != 1 and channels[i][1] != 1:
-                channels[i][6] = dist_others[i]
+        for i in range(len(dist_others)):       #same as for crates
+            channels[i][3] = dist_others[i]
     
 
     #describing distance to crates
     if crates_position.size > 0:
         for i in range(len(dist_crates)):
-            if channels[i][0] != 1 and channels[i][1] != 1:
-                channels[i][7] = dist_crates[i]
-
-    #player on bomb?
-    if len(bomb_position)!=0:
-        if np.any(np.sum(np.abs(bomb_position- player), axis=1) == 0):
-            player_tile[1] = 1
+            channels[i][4] = dist_crates[i]     #got to higher densitys of crates
+  
     
+    #print('channels\n',channels)
     #combining current channels:
     stacked_channels = np.stack(channels).reshape(-1)
     
-    #combining neighbor describtion with current tile describtion:
-    stacked_channels = np.concatenate((stacked_channels, player_tile))
-    
-    #does our player have a bomb?
+
     own_bomb = []
     if game_state['self'][2]:
         own_bomb.append(1)
@@ -401,9 +396,9 @@ def state_to_features(game_state: dict) -> np.array:
         own_bomb.append(0)
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
+    
     #print(stacked_channels)
     return stacked_channels
-
 
 def get_neighbor_pos(player):
     #positions of neigboring tiles in the order (UP, DOWN, LEFT, RIGHT)
@@ -429,7 +424,7 @@ def get_player_dist(game_state, segments, player):
     if other_position.size > 0:
         for segment in segments:
 
-            maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
+            #maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
             
             others_in_segment = np.where((other_position[:,0] > segment[0,0]) & (other_position[:, 0] < segment[0,1]) & (other_position[:, 1] > segment[1,0]) & (other_position[:,0] < segment[1,1]))
             
@@ -441,7 +436,7 @@ def get_player_dist(game_state, segments, player):
         
             dist_norm = np.linalg.norm(d_others, axis = 1)
         
-            dist_closest = maximum_dist / (1 + min(dist_norm))
+            dist_closest = 2/ (1 + min(dist_norm))               #max dist?
             distances.append(dist_closest)
 
         return distances, other_position
@@ -468,45 +463,34 @@ def get_neighbor_value(game_state, channels, neighbor_pos, position_coins, i):
         if field_value == 1:
             channels[i][1] = 1
 
-        #finding coin:
-        if position_coins.size > 0:
-            if np.any(np.sum(np.abs(position_coins-neighbor_pos[i]), axis=1) == 0):
-                channels[i][2] = 1
-
         return channels
 
-def get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, exploding_tiles_map, bomb_position, player, player_tile, explosion_map, i):
+def get_neighbor_danger(game_state, channels, neighbor_pos, close_bomb_indices, bomb_position, player, explosion_map, i):
 
-    #bomb on neighbor?
-    if np.any(np.sum(np.abs(bomb_position-neighbor_pos[i]), axis=1) == 0):
-        channels[i][3] = 1
-
-    #bomb on player position?
-    if player in bomb_position:
-        player_tile[1] = 1
-    
+    player_on_bomb = False
     # are there dangerous tiles in the neighbors?
     bomb_tuples = [tuple(x) for x in bomb_position]
     
-    for j in close_bomb_indices:                                                     #only look at close bombs
+    for j in close_bomb_indices:                                                    #only look at close bombs
         #if bomb_tuples[j] not in exploding_tiles_map.keys(): continue               
-        dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
+        dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])             #get all tiles exploding with close bombs
         if np.any(np.sum(np.abs(dangerous_tiles-neighbor_pos[i]), axis=1) == 0):
-                                                                                #if neighbor is on dangerous tile -> set danger value
-            channels[i,5] = 1                                                   #alternative danger value increasing with timer: (4-bomb_position[j,1])/4
+                                                                                    #if neighbor is on dangerous tile -> set danger value
+            #channels[i,6] = np.linalg.norm(bomb_position[j]-neighbor_pos)/3
+            channels[i,6] = (4 - game_state['bombs'][j][1]) /4                          # more dangerous if shortly before explosion 
+            #channels[i,6] = (game_state['bombs'][j][1] + 1 )/4                           # more dangerous if just placed
 
-        #if player on dangerous tile, add 1 to player tile danger index
-        if np.any(np.sum(np.abs(dangerous_tiles - player), axis=1) == 0):
-            player_tile[0] = 1
+        if i == 3 and np.any(np.sum(np.abs(dangerous_tiles-player), axis=1) == 0):
+            player_on_bomb = True 
 
     #are there already exploding tiles in the neighbors (remember:explosions last for 2 steps)
-    if len(np.where(explosion_map != 0)[0]):                                    #check if there are current explosions
+    if len(np.where(explosion_map != 0)[0]):                                        #check if there are current explosions
         if explosion_map[neighbor_pos[i,0],neighbor_pos[i,1]] != 0:
-            channels[i,5] = 1 
+            channels[i,6] = 1 
 
-    return channels, player_tile
+    return channels, player_on_bomb
   
-def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_position):
+def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_position, neighbor_pos):
 
     field =  game_state['field']
     field = np.where(field == -1 , 1, field)                                    #set crates and walls to 1                        
@@ -516,13 +500,34 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
         dangerous_tiles = np.array(exploding_tiles_map[bomb_tuples[j]])         #get all tiles exploding with close bombs
         for tile in dangerous_tiles:
             if field[tile[0],tile[1]] == 0: field[tile[0],tile[1]]=2 
-
-    #for enemy in game_state['others']:                                          #since other players block moement, look at them as walls
-        #field[enemy[3][0],enemy[3][1]] = 1
     
-    history = []
+    #print(field.T)
+
+    for enemy in game_state['others']:                                          #since other players block moement, look at them as walls
+        field[enemy[3][0],enemy[3][1]] = 1
+
+    tile_count = np.zeros(4)
+    for j, neighbor in enumerate(neighbor_pos):
+        #print('neighbor',neighbor)
+        tile_count[j] = width_search_danger(field,neighbor,player_pos)
+        #print(tile_count)
+        
+    if np.sum(tile_count) == 0 : return tile_count
+
+    #tile_count_ratio = tile_count / np.sum(tile_count)     #old with crate number
+    #print(max(tile_count))
+    tile_count_ratio = tile_count * 1/max(tile_count)
+    
+    return tile_count_ratio  
+
+def width_search_danger(field,neighbor_pos,player_pos):
+    if field[neighbor_pos[0],neighbor_pos[1]] == 1 : 
+        return 0
+
+    tiles = []
+    history = [player_pos]
     q = deque()
-    q.append(player_pos)
+    q.append(neighbor_pos)
 
     while len(q) > 0:
 
@@ -534,64 +539,25 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
         for neighbor in neighbors:
 
             if field[neighbor[0], neighbor[1]] == 0:                            #neighbor is on not exploding tile
-                closest_tile = neighbor                                         # -> end search and return tile
-                return closest_tile
-
+                tiles.append(neighbor) 
+                
             if field[neighbor[0], neighbor[1]] == 2:                            #check if neighbor is wall or crate, if not...
+        
                 if not np.any(np.sum(np.abs(history - neighbor), axis=1) == 0): # if neighbor is already in the q, dont append
+            
                     q.append(neighbor)                                          # neighbor is not yet in q
                     history.append(neighbor)
 
-            else:
-                continue
+            else: continue
 
-    return None
+    if tiles == []:
+        return 0
+    if len(tiles) == 1:
+        return 1/np.linalg.norm(tiles - player_pos)
     
-def get_tile_prio(tile,neighbors):
-    #finding the direction that brings us closer the closest coin
-    closest_neighbor = np.linalg.norm(neighbors-tile, axis=1)
-    priority_index = np.argsort(closest_neighbor)
-
-    return priority_index
-
-def get_coin_dist(game_state, segments, player):
     
-    #converting positions of coins
-    position_coins = np.array(game_state['coins'])
-    #print("position Coins:",position_coins)
-    # distance from coins to player
-    if position_coins.size > 0:
-        distances = []
-
-        for segment in segments:
-
-            maximum_dist = np.sqrt(2 * (15)**2)
-            
-            coins_in_segment = np.where((position_coins[:,0] > segment[0,0]) & (position_coins[:, 0] < segment[0,1]) & (position_coins[:, 1] > segment[1,0]) & (position_coins[:,0] < segment[1,1]))
-            
-            if len(coins_in_segment[0]) == 0:
-                distances.append(0)
-                continue
-            
-            d_coins = np.subtract(position_coins[coins_in_segment[0]], player)   
-        
-            dist_norm = np.linalg.norm(d_coins, axis = 1)
-            #print('dist\n',dist_norm)
-            #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
-            #dist_closest  =  len(dist_norm)/len(position_coins)
-            
-            dist_closest = maximum_dist/(1+min(dist_norm))
-            #print(dist_closest)
-            
-            
-            
-            #print('dist ratio\n',maximum_dist / (1 + dist_norm))
-            distances.append(dist_closest)
-
-        return distances, position_coins
-
-    distances = []
-    return distances, position_coins
+    dist = np.linalg.norm(tiles - player_pos, axis=1)
+    return 1/min(dist)
 
 def get_crate_dist(field, segments, player):
 
@@ -603,7 +569,7 @@ def get_crate_dist(field, segments, player):
     if crates_position.size > 0:
         for segment in segments:
 
-            maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
+            #maximum_dist = np.sqrt((segment[0,1] - segment[0,0])**2 + (segment[1,1] - segment[1,0])**2)
             
             crates_in_segment = np.where((crates_position[:,0] > segment[0,0]) & (crates_position[:, 0] < segment[0,1]) & (crates_position[:, 1] > segment[1,0]) & (crates_position[:,0] < segment[1,1]))
             
@@ -626,6 +592,7 @@ def get_crate_dist(field, segments, player):
     return distances, crates_position
 
 def get_segments(player):
+
     left_half =  np.array([[0, player[0]], [0, 17]]) #np.array(list(product(np.arange(0, player[0]), np.arange(0,17))), dtype = object)
    
     right_half = np.array([[player[0], 17], [0, 17]]) #np.array(list(product(np.arange(player[0], 17), np.arange(0,17))), dtype = object)
@@ -637,3 +604,50 @@ def get_segments(player):
     segments = np.array([up_half, low_half, left_half, right_half])
 
     return segments
+
+def search_for_obj(player_pos, neighbor_pos, obj ,field):
+    #print('coin', obj)
+    #print('player:',player_pos)
+
+
+    if field[neighbor_pos[0],neighbor_pos[1]] != 0 : 
+        return 0
+    
+
+    parents = [None]*17**2 
+
+    flat_neighbor = 17 * neighbor_pos[0] + neighbor_pos[1]
+    flat_player = 17 * player_pos[0] + player_pos[1]
+    flat_obj = 17 * obj[0] + obj[1]
+                    
+    parents[flat_neighbor] = flat_neighbor
+    parents[flat_player] = flat_player
+
+    q = deque()                      
+    q.append(neighbor_pos)              
+ 
+    while len(q) > 0: 
+          
+        node = q.popleft()     
+        if np.linalg.norm(node-obj) == 0:  
+            break   
+
+        for neighbor in get_neighbor_pos(node):
+
+            if field[neighbor[0],neighbor[1]] == 0 :
+               
+                if parents[17 * neighbor[0] + neighbor[1]] is None:
+                    
+                    parents[17 * neighbor[0] + neighbor[1]] = 17 * node[0] + node[1]  
+                    q.append(neighbor) 
+         
+        
+    if parents[flat_obj] is None: 
+        return 0                  
+
+    path = [flat_obj]
+    while path[-1] != flat_neighbor:
+   
+        path.append(parents[path[-1]])
+    
+    return 1/len(path)  

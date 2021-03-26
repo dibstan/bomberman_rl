@@ -476,3 +476,5 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
                     if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:
                         events.append(DROPPED_BOMB_NEXT_TO_ENEMY)
                         #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+
+

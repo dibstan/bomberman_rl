@@ -93,7 +93,7 @@ def state_to_features(game_state: dict) -> np.array:
         return None
 
     #creating channels for one-hot encoding
-    channels = np.zeros((4,9))
+    channels = np.zeros((4,10))
     
     #describing field of agent:
     player_tile = np.zeros(2)
@@ -180,6 +180,13 @@ def state_to_features(game_state: dict) -> np.array:
                 if game_state['others'][index_closest][2]:
                     channels[others_index[i]][7] = 1
                 break 
+
+            #other player on neighbor?
+    if len(game_state['others']) != 0:
+        for other in game_state['others']:
+            for i in range(4):
+                if np.linalg.norm(np.array(other[3]) - neighbor_pos[i]) == 0:
+                    channels[i,9] = 1
         
 
     #player on bomb?
@@ -201,7 +208,7 @@ def state_to_features(game_state: dict) -> np.array:
         own_bomb.append(0)
     
     stacked_channels = np.concatenate((stacked_channels, own_bomb))
-    #print(stacked_channels)
+    
     return stacked_channels
 
 def get_coin_prio(game_state, neighbor_pos, player):

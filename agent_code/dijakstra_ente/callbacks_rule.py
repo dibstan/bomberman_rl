@@ -461,6 +461,8 @@ def find_closest_free_tile(game_state, player_pos, close_bomb_indices, bomb_posi
 
     for enemy in game_state['others']:                                          #since other players block moement, look at them as walls
         field[enemy[3][0],enemy[3][1]] = 1
+    for bomb in bomb_position:
+        field[bomb[0],bomb[1]] = 1
 
     tile_count = np.zeros(4)
     for j, neighbor in enumerate(neighbor_pos):
