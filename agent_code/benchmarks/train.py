@@ -30,6 +30,26 @@ def setup_training(self):
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
 
+    # Coins
+    self.coins = []
+    self.coins_temp = 0
+
+    # Kills 
+    self.kills = []
+    self.kills_temp = 0
+
+    # Deaths
+    self.deaths = []
+    self.deaths_temp = 0
+
+    # Bombs 
+    self.bombs = []
+    self.bombs_temp = 0
+
+    # Destroyed crates
+    self.crates_destroyed = []
+    self.crates_destroyed_temp = 0
+
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -50,12 +70,27 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     """
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
-    # Idea: Add your own events to hand out rewards
     if ...:
         events.append(PLACEHOLDER_EVENT)
 
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
+
+    # Coins
+    if 'COIN_COLLECTED' in events:
+        self.coins_temp += 1
+    
+    if 'KILLED_OPPONENT' in events:
+        self.kills_temp += 1
+
+    if 'KILLED_SELF' in events or 'GOT_KILLED' in events:
+        self.deaths_temp += 1
+
+    if 'BOMB_DROPPED' in events:
+        self.bombs_temp += 1
+
+    if 'CATE_DESTROYED' in events:
+        self.crates_destroyed_temp += 1   
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
@@ -76,6 +111,48 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
+
+    # update benchmarks with events
+    if 'COIN_COLLECTED' in events:
+        self.coins_temp += 1
+
+    if 'KILLED_OPPONENT' in events:
+        self.kills_temp += 1
+
+    if 'KILLED_SELF' in events or 'GOT_KILLED' in events:
+        self.deaths_temp += 1
+
+    if 'BOMB_DROPPED' in events:
+        self.bombs_temp += 1
+
+    if 'CRATE_DESTROYED' in events:
+        self.crates_destroyed_temp += 1   
+
+    # save the benchmarks
+    self.coins.append(self.coins_temp)
+    with open("coins.pt", "wb") as file:
+        pickle.dump(self.coins, file)
+    self.coins_temp = 0
+
+    self.kills.append(self.kills_temp)
+    with open("kills.pt", "wb") as file:
+        pickle.dump(self.kills, file)
+    self.kills_temp = 0
+
+    self.deaths.append(self.deaths_temp)
+    with open("deaths.pt", "wb") as file:
+        pickle.dump(self.deaths, file)
+    self.deaths_temp = 0
+
+    self.bombs.append(self.bombs_temp)
+    with open("bombs.pt", "wb") as file:
+        pickle.dump(self.bombs, file)
+    self.bombs_temp = 0
+
+    self.crates_destroyed.append(self.crates_destroyed_temp)
+    with open("crates_destroyed.pt", "wb") as file:
+        pickle.dump(self.crates_destroyed, file)
+    self.crates_destroyed_temp = 0
 
 
 def reward_from_events(self, events: List[str]) -> int:
