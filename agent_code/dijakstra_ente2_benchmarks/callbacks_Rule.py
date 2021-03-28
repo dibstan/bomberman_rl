@@ -74,15 +74,24 @@ def setup(self):
     self.coordinate_history = deque([], 20)
     # While this timer is positive, agent will not hunt/attack opponents
     self.ignore_others_timer = 0
+    
     self.current_round = 0
 
-    ##############################################################################################       
+    if self.train and not os.path.isfile("my-saved-model.pt"):
+        self.logger.info("Setting up model from scratch.")
+        ##weights = np.random.rand(len(ACTIONS))
+        self.model = None ## weights / weights.sum()
+    else:
+        self.logger.info("Loading model from saved state.")
+        with open("my-saved-model.pt", "rb") as file:
+            self.model = pickle.load(file)
+        
     global exploding_tiles_map
     with open('explosion_map.pt', 'rb') as file:
         exploding_tiles_map = pickle.load(file)
-    ##############################################################################################
-
+    
     self.benchmark = False
+
 
 def reset_self(self):
     self.bomb_history = deque([], 5)
@@ -99,6 +108,8 @@ def act(self, game_state):
     which is a dictionary. Consult 'get_state_for_agent' in environment.py to see
     what it contains.
     """
+    
+    
     self.logger.info(state_to_features(game_state))
 
     if self.current_round % 5 == 0:
@@ -110,22 +121,13 @@ def act(self, game_state):
 
         return move
 
-    else:
-        self.benchmark = False
-
-
-    random_prob = 0.1
+    random_prob = 0.0
 
     if self.train and random.random() < random_prob:
         return np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
-    if not self.train:
-        self.logger.debug("Choosing action according to the epsilon greedy policy.")
-        betas = np.array(list(self.model.values()))
-        feature_vector = np.array(state_to_features(game_state))
-        move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
-        #print(move)
-        return move
+    else:
+        self.benchmark = False
 
     self.logger.info('Picking action according to rule set')
     # Check if we are in a different round
@@ -561,7 +563,7 @@ def get_crate_dist(field, segments, player):
         
 
             dist_closest  =  len(dist_norm)/len(crates_position)
-            #dist_closest = maximum_dist / (1 + min(dist_norm))
+            #dist_closest = 2 / (1 + min(dist_norm))
             #dist_closest = np.sum(maximum_dist / (1 + dist_norm))
             distances.append(dist_closest)
         
@@ -631,6 +633,3 @@ def search_for_obj(player_pos, neighbor_pos, field):
         path.append(parents[path[-1]])
     
     return 1/len(path)  
-
-
-

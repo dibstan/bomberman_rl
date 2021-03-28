@@ -14,7 +14,7 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.01    # learning rate
-GAMMA = 0.1     # discount rate
+GAMMA = 0.01     # discount rate
 N = 5   # N step temporal difference
 CLIP = 10   # initial clip value
 N_CLIPPER = 50      # number of fluctuations considering in auto clipping
@@ -113,6 +113,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param new_game_state: The state the agent is in now.
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
+    #if new_game_state['step']==2:
+        #print(len(np.where(new_game_state['field']==1)[0]))
     if old_game_state is not None:
 
         # Adding auxillary Events
@@ -144,7 +146,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     if self.benchmark:
         benchmarks(self, events)
         save_benchmarks(self)
-        print('benchmark round')
+        #print('benchmark round')
     
     else:
         # updating the model using stochastic gradient descent n-step temporal difference 
@@ -211,7 +213,7 @@ def n_step_TD(self, n):
             
             self.model[action] = self.model[action] + ALPHA * GRADIENT   # updating the model for the relevant action
             #print(self.model)
-            '''
+            
             # Train with augmented data
             #update with horizontally shifted state:
             hshift_model_update, hshift_action = feature_augmentation(self, horizontal_shift, first_state, last_state, action, discount, n_future_rewards, n)
@@ -232,7 +234,7 @@ def n_step_TD(self, n):
             #update with turn around:
             fullturn_model_update, fullturn_action = feature_augmentation(self, turn_around, first_state, last_state, action, discount, n_future_rewards, n)
             self.model[fullturn_action] = fullturn_model_update
-            '''
+            
 
 
 def Q_func(self, state):
@@ -266,13 +268,14 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
 
 
 
+
 def horizontal_shift(state, action):
     #initializing the shifted state:
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[20:30] = state[30:40]
-    shifted_state[30:40] = state[20:30]
+    shifted_state[14:21] = state[21:28]
+    shifted_state[21:28] = state[14:21]
 
     #shifting actions
     if action == "LEFT":
@@ -291,8 +294,8 @@ def vertical_shift(state, action):
     shifted_state = np.copy(state)
 
     #shifting up to down:
-    shifted_state[0:10] = state[10:20]
-    shifted_state[10:20] = state[0:10]
+    shifted_state[0:7] = state[7:14]
+    shifted_state[7:14] = state[0:7]
 
     #shifting actions
     if action == "UP":
@@ -311,13 +314,13 @@ def turn_right(state, action):
     turned_state = np.copy(state)
     
     #up -> left 
-    turned_state[0:10] = state[20:30]
+    turned_state[0:7] = state[14:21]
     #down -> right
-    turned_state[10:20] = state[30:40]
+    turned_state[7:14] = state[21:28]
     #right -> up
-    turned_state[20:30] = state[10:20]
+    turned_state[14:21] = state[7:14]
     #left -> down
-    turned_state[30:40] = state[0:10]
+    turned_state[21:28] = state[0:7]
 
     #shifting actions
     if action == 'LEFT':
@@ -342,13 +345,13 @@ def turn_left(state, action):
     turned_state = np.copy(state)
 
     #up -> left 
-    turned_state[0:10] = state[30:40]
+    turned_state[0:7] = state[21:28]
     #down -> right
-    turned_state[10:20] = state[20:30]
+    turned_state[7:14] = state[14:21]
     #right -> up
-    turned_state[20:30] = state[0:10]
+    turned_state[14:21] = state[0:7]
     #left -> down
-    turned_state[30:40] = state[10:20]
+    turned_state[21:28] = state[7:14]
 
     #shifting actions
     if action == 'LEFT':
@@ -385,17 +388,17 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 20,
+        e.COIN_COLLECTED: 8,
         e.KILLED_OPPONENT: 20,
         e.KILLED_SELF: -80,
-        WAITING_EVENT: -3,
-        e.INVALID_ACTION: -7,
+        WAITING_EVENT: -1,
+        e.INVALID_ACTION: -4,
         e.MOVED_DOWN: -1,
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
         e.MOVED_UP: -1,
         #VALID_ACTION: -2,
-        COIN_CHASER: 4,
+        COIN_CHASER: 1.5,             #vorher 1.5
         MOVED_OUT_OF_DANGER: 5,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
@@ -403,12 +406,46 @@ def reward_from_events(self, events: List[str]) -> int:
         #e.COIN_FOUND: 1,
         CRATE_CHASER: 2,
         BOMB_NEXT_TO_CRATE: 2,
-        BOMB_NOT_NEXT_TO_CRATE: -3,
+        BOMB_NOT_NEXT_TO_CRATE: -2,
         #BOMB_DESTROYED_NOTHING: -3,
-        DROPPED_BOMB_NEAR_ENEMY: 5,
-        DROPPED_BOMB_NEXT_TO_ENEMY: 20, 
-        OPPONENT_CHASER: 2
-        
+        DROPPED_BOMB_NEAR_ENEMY: 1,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 8, 
+        OPPONENT_CHASER: 1
+    }
+    reward_sum = 0
+    for event in events:
+        if event in game_rewards:
+            reward_sum += game_rewards[event]
+    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
+    return reward_sum
+
+
+
+def reward_from_events(self, events: List[str]) -> int:
+    '''
+        Input: self, list of events
+        Output: sum of rewards resulting from the events
+    '''
+    game_rewards = {
+        e.COIN_COLLECTED: 8,
+        e.KILLED_OPPONENT: 20,
+        e.KILLED_SELF: -80,
+        WAITING_EVENT: -1,
+        e.INVALID_ACTION: -4,
+        e.MOVED_DOWN: -1,
+        e.MOVED_LEFT: -1,
+        e.MOVED_RIGHT: -1,
+        e.MOVED_UP: -1,
+        COIN_CHASER: 2,            
+        MOVED_OUT_OF_DANGER: 5,
+        STAYED_NEAR_BOMB: -5,
+        MOVED_INTO_DANGER: -5,
+        CRATE_CHASER: 2,
+        BOMB_NEXT_TO_CRATE: 2,
+        BOMB_NOT_NEXT_TO_CRATE: -2,
+        DROPPED_BOMB_NEAR_ENEMY: 1,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 8, 
+        OPPONENT_CHASER: 1.5  
 
     }
     reward_sum = 0
@@ -468,13 +505,6 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         #event in case agent moved onto a dangerous tile -> penalty
         if old_player_coor not in dangerous_tiles and new_player_coor in dangerous_tiles:
             events.append(MOVED_INTO_DANGER)
-
-    #if bombs destroyed nothing
-    if 'BOMB_EXPLODED' in events:                   #a bomb placed by our agent exploded
-        if 'CRATE_DESTROYED' not in events:         #no crate got destroyed (in the future also include:no enemy got bombed)
-            #print(BOMB_DESTROYED_NOTHING)
-            events.append(BOMB_DESTROYED_NOTHING)   # -> penalty
-    
     
     #define crate chaser: the agent gets rewarded if he moves closer to crates ONLY if he currently has a bomb
     field = old_game_state['field']
@@ -493,8 +523,6 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
     for others_coor in old_game_state['others']:
         enemys.append(others_coor[3])
 
-
-
     #define event for bomb next to crate
     if self_action == 'BOMB' and e.INVALID_ACTION not in events:                                       #if bomb is placed...  
         for i in range(len(np.where(old_crate_distance==1)[0])):    # ... give reward for each crate neighbouring bomb position                   
@@ -506,8 +534,8 @@ def aux_events(self, old_game_state, self_action, new_game_state, events):
         #new
         if len(old_game_state['others']) !=0:
             for others_coor in old_game_state['others']:
-                if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=4:
-                    #print(DROPPED_BOMB_NEXT_TO_ENEMY)
+                if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) <=3:
+                    #print(DROPPED_BOMB_NEAR_ENEMY)
                     events.append(DROPPED_BOMB_NEAR_ENEMY)
                     #print('near')
                 if np.linalg.norm(np.subtract(old_player_coor,others_coor[3])) == 1:

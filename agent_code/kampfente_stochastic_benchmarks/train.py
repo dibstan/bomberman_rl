@@ -146,7 +146,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     if self.benchmark:
         benchmarks(self, events)
         save_benchmarks(self)
-        print('benchmark round')
+        #print('benchmark round')
     
     else:
         # updating the model using stochastic gradient descent n-step temporal difference 
@@ -392,29 +392,30 @@ def reward_from_events(self, events: List[str]) -> int:
         Output: sum of rewards resulting from the events
     '''
     game_rewards = {
-        e.COIN_COLLECTED: 30,
-        e.KILLED_OPPONENT: 50,
-        e.KILLED_SELF: -150,
-        WAITING_EVENT: -3,
-        e.INVALID_ACTION: -7,
+        e.COIN_COLLECTED: 8,
+        e.KILLED_OPPONENT: 20,
+        e.KILLED_SELF: -80,
+        WAITING_EVENT: -1,
+        e.INVALID_ACTION: -4,
         e.MOVED_DOWN: -1,
         e.MOVED_LEFT: -1,
         e.MOVED_RIGHT: -1,
         e.MOVED_UP: -1,
         #VALID_ACTION: -2,
-        COIN_CHASER: 1.5,
-        MOVED_OUT_OF_DANGER: 8,
+        COIN_CHASER: 2,             #vorher 1.5
+        MOVED_OUT_OF_DANGER: 5,
         STAYED_NEAR_BOMB: -5,
         MOVED_INTO_DANGER: -5,
-        e.CRATE_DESTROYED: 6,   #2
-        e.COIN_FOUND: 1,
-        CRATE_CHASER: 0.5,
-        BOMB_NEXT_TO_CRATE: 3,
-        BOMB_NOT_NEXT_TO_CRATE: -3,
+        #e.CRATE_DESTROYED: 5,   #2
+        #e.COIN_FOUND: 1,
+        CRATE_CHASER: 2,
+        BOMB_NEXT_TO_CRATE: 2,
+        BOMB_NOT_NEXT_TO_CRATE: -2,
         #BOMB_DESTROYED_NOTHING: -3,
-        DROPPED_BOMB_NEAR_ENEMY: 7,
-        DROPPED_BOMB_NEXT_TO_ENEMY: 20,
-        OPPONENT_CHASER: 2 
+        DROPPED_BOMB_NEAR_ENEMY: 1,
+        DROPPED_BOMB_NEXT_TO_ENEMY: 8, 
+        OPPONENT_CHASER: 1  
+
 
     }
     reward_sum = 0

@@ -6,6 +6,8 @@ import random
 import pickle
 import os
 
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+
 def look_for_targets(free_space, start, targets, logger=None):
     """Find direction of closest target that can be reached via free tiles.
 
@@ -118,6 +120,11 @@ def act(self, game_state):
         move = list(self.model.keys())[np.argmax(np.dot(betas, feature_vector))]
 
         return move
+
+    random_prob = 0.1
+
+    if self.train and random.random() < random_prob:
+        return np.random.choice(ACTIONS, p=[0.2,0.2,0.2,0.2,0.1,0.1])
 
     else:
         self.benchmark = False

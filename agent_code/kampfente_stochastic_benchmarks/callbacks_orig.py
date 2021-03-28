@@ -68,7 +68,7 @@ def act(self, game_state: dict) -> str:
     elif self.train:
         self.benchmark = False
 
-        random_prob = 0.8
+        random_prob = 0.5
         
         if random.random() < random_prob:
             self.logger.debug("Choosing action according to the epsilon greedy policy.")
