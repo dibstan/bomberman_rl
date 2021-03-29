@@ -219,6 +219,9 @@ def Q_func(self, state):
 
 
 def feature_augmentation(self, aug_direction, first_state, last_state, action, disc, n_future_rew, n):
+    '''Updates the model using n_step_temporal difference with augmented states'''
+
+
     shift_first_state, shift_action = aug_direction(first_state, action)
     
     if last_state is not None:  # value estimate using n-step temporal difference
@@ -240,10 +243,12 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
 
 
 def horizontal_shift(state, action):
+    '''This function mirrors along the vertical axis'''
+
     #initializing the shifted state:
     shifted_state = np.copy(state)
 
-    #shifting up to down:
+    #shifting left to right:
     shifted_state[14:21] = state[21:28]
     shifted_state[21:28] = state[14:21]
 
@@ -260,6 +265,8 @@ def horizontal_shift(state, action):
     return shifted_state, new_action
 
 def vertical_shift(state, action):
+    '''This function mirrors along the horizontal axis'''
+
     #initializing the shifted state:
     shifted_state = np.copy(state)
 
@@ -280,6 +287,8 @@ def vertical_shift(state, action):
     return shifted_state, new_action
 
 def turn_right(state, action):
+    '''This function turns the board to the right by 90 degrees'''
+
     #initializing the turned state:
     turned_state = np.copy(state)
     
@@ -311,6 +320,8 @@ def turn_right(state, action):
     return turned_state, new_action
 
 def turn_left(state, action):
+    '''This function turns the board to the left by 90 degrees'''
+
     #initializing the turned state:
     turned_state = np.copy(state)
 
@@ -342,6 +353,8 @@ def turn_left(state, action):
     return turned_state, new_action
 
 def turn_around(state, action):
+    '''This function turns the board to the left by 180 degrees'''
+
     #first turn:
     turn1, action1 = turn_left(state, action)
 
@@ -389,7 +402,7 @@ def reward_from_events(self, events: List[str]) -> int:
 
 
 def aux_events(self, old_game_state, self_action, new_game_state, events):
-
+    '''Defining auxillary events for auxillary rewards to optimize training'''
     
     # get positions of the player in old state and new state (tuples (x,y) in this case)
     old_player_coor = old_game_state['self'][3]     
