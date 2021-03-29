@@ -86,8 +86,6 @@ def state_to_features(game_state: dict) -> np.array:
     Our model considers only the nearest neighbors of the player, assigning 7 Different values to each of them:
     [Wall, Crate, Coin_prio, Opponent_prio, Crate_prio, free_tile, Danger]
 
-
-
     :param game_state:  A dictionary describing the current game board.
     :return: np.array
     """

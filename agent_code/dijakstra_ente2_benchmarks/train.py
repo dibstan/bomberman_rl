@@ -14,10 +14,10 @@ Transition = namedtuple('Transition',
 # Hyperparameters
 RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 ALPHA = 0.01    # learning rate
-GAMMA = 0.01     # discount rate
-N = 5   # N step temporal difference
-CLIP = 10   # initial clip value
-N_CLIPPER = 50      # number of fluctuations considering in auto clipping
+GAMMA = 0.01    # discount rate
+N = 5           # N step temporal difference
+CLIP = 10       # initial clip value
+N_CLIPPER = 50  # number of fluctuations considering in auto clipping
 
 
 
@@ -35,7 +35,7 @@ BOMB_NOT_NEXT_TO_CRATE = 'BOMB_NOT_NEXT_TO_CRATE'
 DROPPED_BOMB_NEAR_ENEMY = 'DROPPED_BOMB_NEAR_ENEMY'
 DROPPED_BOMB_NEXT_TO_ENEMY ='DROPPED_BOMB_NEXT_TO_ENEMY'
 OPPONENT_CHASER = 'OPPONENT_CHASER'
-#LESS_DISTANCE_TO_BOMB = 'LESS_DISTANCE_TO_BOMB'
+
 
 
 

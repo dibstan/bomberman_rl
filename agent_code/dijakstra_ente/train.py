@@ -224,16 +224,16 @@ def feature_augmentation(self, aug_direction, first_state, last_state, action, d
     
     if last_state is not None:  # value estimate using n-step temporal difference
         shift_last_state, shift_action = aug_direction(last_state, action)
-        Q_TD_shift = np.dot(disc, n_future_rew) + GAMMA**n * Q_func(self, shift_last_state)   # value estimate using n-step temporal difference
+        Q_TD_shift = np.dot(disc, n_future_rew) + GAMMA**n * Q_func(self, shift_last_state)     # value estimate using n-step temporal difference
 
     else:
         shift_last_state = None
         Q_TD_shift = np.dot(disc, n_future_rew)
 
-    Q_shift = np.dot(shift_first_state, self.model[shift_action])     # value estimate of current model
+    Q_shift = np.dot(shift_first_state, self.model[shift_action])                               # value estimate of current model
 
     GRADIENT = shift_first_state * (Q_TD_shift - Q_shift)
-    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip, self.clip)   # updating the model for the relevant action
+    model_update = self.model[shift_action] + ALPHA * np.clip(GRADIENT, -self.clip, self.clip)  # updating the model for the relevant action
 
     return model_update, shift_action
 
